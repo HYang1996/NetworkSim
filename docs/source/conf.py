@@ -13,9 +13,11 @@
 import os
 import sys
 
-# ON_READTHEDOCS = os.environ.get("READTHEDOCS") == "True"
-# if not ON_READTHEDOCS:
-sys.path.insert(0, os.path.abspath("../.."))
+ON_READTHEDOCS = os.environ.get("READTHEDOCS") == "True"
+if not ON_READTHEDOCS:
+    sys.path.insert(0, os.path.abspath("../.."))
+else:
+    sys.path.insert(0, os.path.abspath('.'))
 
 
 # -- Project information -----------------------------------------------------
