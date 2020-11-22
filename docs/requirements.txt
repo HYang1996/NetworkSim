@@ -5,3 +5,4 @@ pygments
 simpy
 numpy
 pandas
+joblib
