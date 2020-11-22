@@ -30,15 +30,16 @@ def test_control_packet_location_on_ring():
         control_ring.add_packet(node_id=test_nodes[i],
                                 destination_id=-1,
                                 packet=test_packets[i],
-                                timestamp=test_time[i])
+                                generation_timestamp=test_time[i],
+                                transmission_timestamp=test_time[i])
     presence_expected = [True, True, True, True, True, True]
     packet_expected = [
-        ['000000000', 0, 0, 0],
-        ['000000001', 5, 50, 50],
-        ['000000011', 10, 99, 99],
-        ['000000000', 0, 0, 0],
-        ['000000001', 5, 50, 50],
-        ['000000011', 10, 99, 99]
+        ['000000000', 0, 0, 0, 0, -1],
+        ['000000001', 5, 5, 50, 50, -1],
+        ['000000011', 10, 10, 99, 99, -1],
+        ['000000000', 0, 0, 0, 0, -1],
+        ['000000001', 5, 5, 50, 50, -1],
+        ['000000011', 10, 10, 99, 99, -1]
     ]
     presence_test = [None] * 6
     packet_test = [None] * 6
@@ -64,15 +65,16 @@ def test_data_packet_location_on_ring():
         data_ring.add_packet(node_id=test_nodes[i],
                              destination_id=-1,
                              packet=test_packets[i],
-                             timestamp=test_time[i])
+                             generation_timestamp=test_time[i],
+                             transmission_timestamp=test_time[i])
     presence_expected = [True, True, True, True, True, True]
     packet_expected = [
-        ['00000000', 0, 0, 0],
-        ['00001111', 20, 50, 50],
-        ['11111111', 40, 99, 99],
-        ['00000000', 0, 0, 0],
-        ['00001111', 20, 50, 50],
-        ['11111111', 40, 99, 99]
+        ['00000000', 0, 0, 0, 0, -1],
+        ['00001111', 20, 20, 50, 50, -1],
+        ['11111111', 40, 40, 99, 99, -1],
+        ['00000000', 0, 0, 0, 0, -1],
+        ['00001111', 20, 20, 50, 50, -1],
+        ['11111111', 40, 40, 99, 99, -1]
     ]
     presence_test = [None] * 6
     packet_test = [None] * 6

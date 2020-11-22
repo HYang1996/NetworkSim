@@ -104,7 +104,8 @@ Synchronised Clocks
     :toctree: modules/auto_generated/
     :template: class.rst
 
-    DataClock
+    TransmitterDataClock
+    ReceiverDataClock
     ControlClock
 
 Simulation Processes

@@ -21,17 +21,31 @@ class Distribution:
 
     def __init__(
             self,
-            model=None,
-            seed=0
+            seed,
+            model=None
     ):
         if model is None:
             model = Model()
         self.model = model
-        self.seed = seed
+        self.pareto_position_parameter, self.pareto_shape_parameter = self.get_pareto_parameters()
+        self.poisson_position_parameter, self.poisson_shape_parameter, self.poisson_lambda = \
+            self.get_poisson_parameters()
+        np.random.seed(seed)
 
-    def poisson(self, until):
+    def uniform(self):
         """
-        Poisson traffic source.
+        A uniform distribution to generate a new destination node ID.
+
+        Returns
+        -------
+        index : int
+            The index of the destination ID to be chosen.
+        """
+        return np.random.randint(low=0, high=self.model.network.num_nodes - 1)
+
+    def get_poisson_parameters(self):
+        """
+        Calculation of Poisson distribution parameters,
 
         The interarrival time distribution follows a biased exponential distribution [3]_:
 
@@ -50,11 +64,6 @@ class Distribution:
 
             b = \\frac{\\sigma \\lambda_a}{\\sigma - \\lambda_a}
 
-        Parameters
-        ----------
-        until : int
-            Finished time of the simulation in ns.
-
         Returns
         -------
         interarrival : list
@@ -64,25 +73,28 @@ class Distribution:
         ----------
         .. [3] Gebali, F., 2008. Analysis of computer and communication networks. Springer Science & Business Media.
         """
-
-        # initialise seed and parameters
-        np.random.seed(self.seed)
-        interarrival = [0]
-        # Burst rate, in packets/s
+        # Burst rate to each node, in packets/s
         sigma = self.model.constants.get('maximum_bit_rate') / self.model.data_signal.size / 8
         # Position parameter, in ns
-        a = 1 / sigma
-        # Shape parameter, in ns^-1
+        position_parameter = 1 / sigma
+        # Shape parameter, in ns^-1 (average rate to to each node)
         lambda_a = self.model.constants.get('average_bit_rate') / self.model.data_signal.size / 8
-        b = (sigma * lambda_a) / (sigma - lambda_a)
-        while np.sum(interarrival) <= until:
-            new_interarrival = np.random.exponential(scale=1 / b) + a
-            interarrival.append(new_interarrival)
-        return interarrival[1:]
+        shape_parameter = (sigma * lambda_a) / (sigma - lambda_a)
+        return position_parameter, shape_parameter, lambda_a
 
-    def pareto(self, until, hurst_parameter=0.8):
+    def poisson(self):
         """
-        Pareto distribution variate generation.
+        Poisson distribution variate generation.
+
+        Returns
+        -------
+        A new interarrival time calculated from the Poisson distribution.
+        """
+        return np.random.exponential(scale=1 / self.poisson_shape_parameter) + self.poisson_position_parameter
+
+    def get_pareto_parameters(self):
+        """
+        Calculation of Pareto distribution parameters.
 
         Pareto distribution could be described by the pdf [1]_:
 
@@ -98,16 +110,16 @@ class Distribution:
 
         Parameters
         ----------
-        until : float
-            Finished time of the simulation in ns.
         hurst_parameter : float, optional
             The Hurst parameter for the Pareto distribution. Default is ``0.8`` [2]_. However, this parameter is not \
             in use currently as the average bit rate is used to calculate the shape parameter.
 
         Returns
         -------
-        interarrival : list
-            A list of interarrival time in ns.
+        position_parameter : float
+            The position parameter.
+        shape_parameter : float
+            The shape parameter.
 
         References
         ----------
@@ -115,17 +127,20 @@ class Distribution:
         .. [2] So, W.H. and Kim, Y.C., 2007. Fair MAC protocol for optical ring network of wavelength-shared \
         access nodes. Photonic Network Communications, 13(3), pp.289-295.
         """
-        # initialise seed and parameters
-        np.random.seed(self.seed)
-        interarrival = [0]
         # Calculate shape parameter
-        # b = 3 - 2 * hurst_parameter
         sigma = self.model.constants.get('maximum_bit_rate') / self.model.data_signal.size / 8
         lambda_a = self.model.constants.get('average_bit_rate') / self.model.data_signal.size / 8
-        b = sigma / (sigma - lambda_a)
+        shape_parameter = sigma / (sigma - lambda_a)
         # Calculate position parameter
-        a = 1 / sigma
-        while np.sum(interarrival) <= until:
-            new_interarrival = (np.random.pareto(a=b) + 1) * a
-            interarrival.append(new_interarrival)
-        return interarrival[1:]
+        position_parameter = 1 / sigma
+        return position_parameter, shape_parameter
+
+    def pareto(self):
+        """
+        Pareto distribution variate generation.
+
+        Returns
+        -------
+        A new interarrival time calculated from the Pareto distribution.
+        """
+        return (np.random.pareto(a=self.pareto_shape_parameter) + 1) * self.pareto_position_parameter

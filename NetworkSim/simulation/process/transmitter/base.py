@@ -4,7 +4,7 @@ __author__ = ["Hongyi Yang"]
 import pandas as pd
 
 from NetworkSim.architecture.setup.model import Model
-from NetworkSim.simulation.tools.clock import DataClock, ControlClock
+from NetworkSim.simulation.tools.clock import TransmitterDataClock, ControlClock, ReceiverDataClock
 
 
 class BaseTransmitter:
@@ -51,7 +51,8 @@ class BaseTransmitter:
         if model is None:
             model = Model()
         self.model = model
-        self.data_clock_cycle = DataClock(model=model).clock_cycle
+        self.transmitter_data_clock_cycle = TransmitterDataClock(model=model).clock_cycle
+        self.receiver_data_clock_cycle = ReceiverDataClock(model=model).clock_cycle
         self.control_clock_cycle = ControlClock(model=model).clock_cycle
         data = []
         self.transmitted_data_packet_df = pd.DataFrame(data, columns=[
@@ -65,7 +66,7 @@ class BaseTransmitter:
             'Destination ID'
         ])
 
-    def transmit_control_packet(self, packet, destination_id):
+    def transmit_control_packet(self, packet, destination_id, generation_timestamp):
         """
         Control packet transmission function.
 
@@ -77,11 +78,14 @@ class BaseTransmitter:
             The control packet.
         destination_id : int
             The ID of the node to which the control packet is transmitted.
+        generation_timestamp : float
+            The timestamp when the control packet is generated and stored in RAM.
         """
         # Add control packet onto the ring
         self.model.control_ring.add_packet(
             packet=packet,
-            timestamp=self.env.now,
+            generation_timestamp=generation_timestamp,
+            transmission_timestamp=self.env.now,
             node_id=self.transmitter_id,
             destination_id=destination_id
         )
@@ -92,7 +96,7 @@ class BaseTransmitter:
             'Destination ID': destination_id
         }, ignore_index=True)
 
-    def transmit_data_packet(self, packet, destination_id):
+    def transmit_data_packet(self, packet, destination_id, generation_timestamp):
         """
         Data packet transmission function.
 
@@ -104,11 +108,14 @@ class BaseTransmitter:
             The data packet.
         destination_id : int
             The ID of the node to which the data packet is transmitted.
+        generation_timestamp : float
+            The timestamp when the data packet is generated and stored in RAM.
         """
         # Add data packet onto the ring
         self.model.data_rings[self.transmitter_id].add_packet(
             packet=packet,
-            timestamp=self.env.now,
+            generation_timestamp=generation_timestamp,
+            transmission_timestamp=self.env.now,
             node_id=self.transmitter_id,
             destination_id=destination_id
         )
@@ -126,11 +133,12 @@ class BaseTransmitter:
         while True:
             if len(self.ram.queue) != 0:
                 # Obtain packet information in the queue
-                timestamp, data_packet, destination_id = self.ram.queue.pop(0)
+                generation_timestamp, data_packet, destination_id = self.ram.queue.pop(0)
                 # Transmit the data packet
                 self.transmit_data_packet(
                     packet=data_packet,
-                    destination_id=destination_id
+                    destination_id=destination_id,
+                    generation_timestamp=generation_timestamp
                 )
             yield self.env.timeout(self.data_clock_cycle)
 
@@ -160,12 +168,37 @@ class BaseTransmitter:
             Packet information, in the format:
 
             - `raw_packet`
-            - `timestamp`
-            - 'packet_entry_point'
+            - `generation_timestamp`
+            - `transmission_timestamp`
+            - `packet_entry_point`
             - `entry_node_id`
+            - `destination_node_id`
         """
         return self.model.data_rings[self.transmitter_id].check_packet(
             current_time=self.env.now,
+            node_id=self.transmitter_id
+        )
+
+    def check_data_packet_after_guard_interval(self):
+        """
+        Function to check if there is a data packet present at the transmitter after the guard interval
+
+        Returns
+        -------
+        present : bool
+            Presence of the data packet. ``True`` if present, ``False`` if not present.
+        packet : packet
+            Packet information, in the format:
+
+            - `raw_packet`
+            - `generation_timestamp`
+            - `transmission_timestamp`
+            - `packet_entry_point`
+            - `entry_node_id`
+            - `destination_node_id`
+        """
+        return self.model.data_rings[self.transmitter_id].check_packet(
+            current_time=self.env.now + self.model.constants.get("data_guard_interval"),
             node_id=self.transmitter_id
         )
 
@@ -181,9 +214,11 @@ class BaseTransmitter:
             Packet information, in the format:
 
             - `raw_packet`
-            - `timestamp`
-            - 'packet_entry_point'
+            - `generation_timestamp`
+            - `transmission_timestamp`
+            - `packet_entry_point`
             - `entry_node_id`
+            - `destination_node_id`
         """
         return self.model.control_ring.check_packet(
             current_time=self.env.now,
@@ -205,6 +240,12 @@ class BaseTransmitter:
             control=control
         )
 
+    def transmit_on_both_rings(self):
+        """
+        Process to transmit control and data packets.
+        """
+        raise NotImplementedError("This is an abstract packet transmission process method.")
+
     def transmit_on_data_ring(self):
         """
         Process to transmit data packets.
@@ -220,11 +261,6 @@ class BaseTransmitter:
     def initialise(self):
         """
         Initialisation of the transmitter simulation.
-
-        This function adds two asynchronous transmitter processes into the environment:
-
-        - Transmission of control packets
-        - Transmission of data packets
         """
-        self.env.process(self.transmit_on_data_ring())
         self.env.process(self.transmit_on_control_ring())
+        self.env.process(self.transmit_on_data_ring())

@@ -2,6 +2,8 @@ __all__ = ["Simulator"]
 __author__ = ["Hongyi Yang"]
 
 import simpy
+import pandas as pd
+from joblib import Parallel, delayed
 
 from NetworkSim.architecture.setup.model import Model
 from NetworkSim.simulation.process.ram import RAM
@@ -12,9 +14,6 @@ from NetworkSim.simulation.process.receiver.tunable import TR
 class Simulator:
     """
     Simulation wrapper to create a discrete event simulation of the ring network.
-
-    TODO:
-        * Initialisation could be parallelised for better performance
 
     Parameters
     ----------
@@ -54,46 +53,67 @@ class Simulator:
         self.transmitter_type = transmitter_type
         self.receiver_type = receiver_type
         self.model = model
-        self.RAM = []
-        self.transmitter = []
-        self.receiver = []
+        self.RAM = [None] * self.model.network.num_nodes
+        self.transmitter = [None] * self.model.network.num_nodes
+        self.receiver = [None] * self.model.network.num_nodes
+        data = []
+        self.latency_df = pd.DataFrame(data, columns=[
+            'Source ID',
+            'Destination ID',
+            'Latency'
+        ])
+        self.error_df = pd.DataFrame(data, columns=[
+            'Source ID',
+            'Destination ID',
+            'Error Timestamp'
+        ])
+        self.n_jobs = -1
 
     def initialise(self):
         """
         Initialisation of the simulation, where RAN, transmitter, and receiver processes are added to the environment.
         """
-        for i in range(self.model.network.num_nodes):
-            # Create RAM processes
-            self.RAM.append(
-                RAM(
+
+        def _initialise_ram(node_id):
+            # Create RAM process
+            self.RAM[node_id] = RAM(
+                env=self.env,
+                until=self.until,
+                ram_id=node_id,
+                model=self.model
+            )
+            # Initialise RAM process
+            self.RAM[node_id].initialise()
+
+        def _initialise_transmitter(node_id):
+            # Create and initialise transmitter process
+            if self.transmitter_type == "fixed":
+                self.transmitter[node_id] = FT(
                     env=self.env,
-                    until=self.until,
-                    ram_id=i,
+                    ram=self.RAM[node_id],
+                    transmitter_id=node_id,
                     model=self.model
                 )
-            )
-            self.RAM[i].initialise()
-            # Create transmitter processes
-            if self.transmitter_type == "fixed":
-                self.transmitter.append(
-                    FT(
-                        env=self.env,
-                        ram=self.RAM[i],
-                        transmitter_id=i,
-                        model=self.model
-                    )
-                )
-            self.transmitter[i].initialise()
-            # Create receiver processes
+                self.transmitter[node_id].initialise()
+
+        def _initialise_receiver(node_id):
+            # Create and initialise receiver process
             if self.receiver_type == "tunable":
-                self.receiver.append(
-                    TR(
-                        env=self.env,
-                        receiver_id=i,
-                        model=self.model
-                    )
+                self.receiver[node_id] = TR(
+                    env=self.env,
+                    until=self.until,
+                    receiver_id=node_id,
+                    model=self.model,
+                    simulator=self
                 )
-            self.receiver[i].initialise()
+            self.receiver[node_id].initialise()
+        # Parallel
+        Parallel(n_jobs=self.n_jobs, require='sharedmem')(
+            delayed(_initialise_ram)(node_id) for node_id in range(self.model.network.num_nodes))
+        Parallel(n_jobs=self.n_jobs, require='sharedmem')(
+            delayed(_initialise_transmitter)(node_id) for node_id in range(self.model.network.num_nodes))
+        Parallel(n_jobs=self.n_jobs, require='sharedmem')(
+            delayed(_initialise_receiver)(node_id) for node_id in range(self.model.network.num_nodes))
 
     def run(self):
         """

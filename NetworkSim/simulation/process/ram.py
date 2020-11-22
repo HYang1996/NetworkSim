@@ -48,6 +48,8 @@ class RAM:
         - `timestamp`
         - `data_packet`
         - `destination_id`
+    destination_ids : list
+        A list of possible destination IDs on the ring.
     """
     def __init__(
             self,
@@ -72,73 +74,81 @@ class RAM:
             'Raw Packet',
             'Destination ID'
         ])
-        self.interarrival = [
-            self.get_interarrival(seed=i)
-            for i in range(self.model.network.num_nodes)
-        ]
+        self.dis = Distribution(seed=ram_id, model=model)
+        self.interarrival = self.get_interarrival()
+        self.next_interarrival = 0
         self.queue = []
+        self.destination_ids = self.get_destination_ids()
 
-    def get_interarrival(self, seed):
+    def get_new_destination(self):
         """
-        Get interarrival time statistics.
-
-        Parameters
-        ----------
-        seed : int
-            The randomisation seed.
+        Function to return a new destination ID.
 
         Returns
         -------
-        interarrival : list
-            A list of interarrival time.
+        destination_id : int
+            The ID of the new destination node.
         """
-        dis = Distribution(seed=seed)
-        if self.distribution == 'pareto':
-            return dis.pareto(until=self.until)
-        if self.distribution == 'poisson':
-            return dis.poisson(until=self.until)
+        return self.destination_ids[self.dis.uniform()]
 
-    def generate_data_packet(self, destination_id, timestamp):
+    def get_destination_ids(self):
+        """
+        Function to generate a list of destination IDs to be chosen from.
+
+        Returns
+        -------
+        destination_ids : list
+            List of destination IDs.
+        """
+        destination_ids = []
+        for i in range(self.model.network.num_nodes):
+            if i != self.ram_id:
+                destination_ids.append(i)
+        return destination_ids
+
+    def get_interarrival(self):
+        """
+        Get interarrival time statistics.
+
+        Returns
+        -------
+        interarrival : float
+            A new interval time
+        """
+        if self.distribution == 'pareto':
+            return self.dis.pareto()
+        if self.distribution == 'poisson':
+            return self.dis.poisson()
+
+    def generate_data_packet(self):
         """
         Data packet generation.
-
-        Parameters
-        ----------
-        destination_id : int
-            The node ID of the destination node.
-        timestamp : float
-            The timestamp when the data packet is generated.
 
         Returns
         -------
         data_packet : str
             The data packet string in binary.
         """
-        # Check input type
-        if not isinstance(destination_id, int):
-            raise ValueError('Destination node ID must be an integer.')
+        timestamp = self.env.now
         data_packet = self.model.data_signal.generate_packet()
+        destination_id = self.get_new_destination()
         self.generated_data_packet_df = self.generated_data_packet_df.append({
             'Timestamp': timestamp,
-            'Interarrival to Next': self.interarrival[destination_id][self.counter[destination_id]],
+            'Interarrival to Next': self.next_interarrival,
             'Raw Packet': data_packet,
             'Destination ID': destination_id
         }, ignore_index=True)
         self.queue.append([timestamp, data_packet, destination_id])
 
-    def ram_traffic_generation(self, destination_id):
+    def ram_traffic_generation(self):
         """
         Generation of RAM traffic as a simulation process.
-
-        Parameters
-        ----------
-        destination_id
-            The destination ID.
         """
         while True:
-            yield self.env.timeout(self.interarrival[destination_id][self.counter[destination_id]])
-            self.counter[destination_id] += 1
-            self.generate_data_packet(destination_id=destination_id, timestamp=self.env.now)
+            self.next_interarrival = self.get_interarrival()
+            yield self.env.timeout(self.interarrival)
+            self.generate_data_packet()
+            self.interarrival = self.next_interarrival
 
     def initialise(self):
         """
@@ -147,6 +157,4 @@ class RAM:
         This function adds all RAM activities that will be used for the simulation, \
         including data sent to all nodes except for the node where the RAM sits, for the duration of the simulation.
         """
-        for i in range(self.model.network.num_nodes):
-            if i != self.ram_id:
-                self.env.process(self.ram_traffic_generation(destination_id=i))
+        self.env.process(self.ram_traffic_generation())
