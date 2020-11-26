@@ -1,4 +1,4 @@
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HYang1996/NetworkSim/master?filepath=NetworkSim%2Fexamples%2F)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HYang1996/NetworkSim/master)
 
 # NetworkSim Package
 
