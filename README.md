@@ -1,4 +1,5 @@
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/HYang1996/NetworkSim/master?filepath=examples)
+[![Documentation Status](https://readthedocs.org/projects/networksim/badge/?version=latest)](https://networksim.readthedocs.io/en/latest/)
 
 # NetworkSim Package
 
