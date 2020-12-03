@@ -8,8 +8,8 @@
 NetworkSim is a Python package used to simulation data transmission in a typical optical wavelength ring network using the Wavelength Division Multiplexing (WDM) technique.
 
 <div style="text-align:center">
-    <img width="400" src="/docs/source/images/Ring-Network-Diagram.png" alt="Ring Network Diagram">
-    A typical WDM optical ring network in the data centre
+    <img width="600" src="/docs/source/images/Ring-Network-Diagram.png" alt="Ring Network Diagram">
+    <p>A typical WDM optical ring network in the data centre</p>
 </div>
 
 Currently, two protocols have been implemented for the simulation, namely the fixed transmitter (FT) - tunable receiver (TR) protocol and the tunable transmitter (TT) - fixed receiver (FR) protocol.
