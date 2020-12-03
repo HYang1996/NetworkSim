@@ -12,12 +12,9 @@ Navigation
    :caption: User
    :maxdepth: 2
 
-   installation
-   how_to_get_started
    api_reference
 
 .. toctree::
    :caption: About
    :maxdepth: 2
 
-   about
