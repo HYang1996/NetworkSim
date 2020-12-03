@@ -3,10 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Package Structure
------------------
-
-.. include:: tree.rst
+.. include:: ../../README.rst
 
 Navigation
 ----------
@@ -15,10 +12,12 @@ Navigation
    :caption: User
    :maxdepth: 2
 
+   installation
+   how_to_get_started
    api_reference
 
 .. toctree::
    :caption: About
    :maxdepth: 2
 
-   development
+   about
