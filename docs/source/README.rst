@@ -12,7 +12,7 @@
 .. _pypi: https://pypi.org/project/NetworkSim/
 
 .. |binder| image:: https://mybinder.org/badge_logo.svg
-.. _binder: https://mybinder.org/v2/gh/HYang1996/NetworkSim/master?filepath=example
+.. _binder: https://mybinder.org/v2/gh/HYang1996/NetworkSim/master?filepath=examples
 
 NetworkSim
 ==========
