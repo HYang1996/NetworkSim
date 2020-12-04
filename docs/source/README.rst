@@ -44,6 +44,11 @@ Quickstart
 
     from NetworkSim import BaseSimulator
 
+    simulator = BaseSimulator()
+    simulator.initialise()
+    simulator.run()
+    simulator.summary()
+
 Documentation
 -------------
 
