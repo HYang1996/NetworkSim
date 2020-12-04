@@ -24,7 +24,9 @@ NetworkSim is a Python package used to simulation data transmission in a typical
     :align: center
 
 
-Currently, two protocols have been implemented for the simulation, namely the fixed transmitter (FT) - tunable receiver (TR) protocol and the tunable transmitter (TT) - fixed receiver (FR) protocol.
+In this package, two protocols have been implemented for the simulation, namely the fixed transmitter - tunable receiver (FT-TR) protocol and the tunable transmitter - fixed receiver (TT-FR) protocol.
+
+This package is developed as part of our final year group project and is still under development. It will be constantly updated as we troubleshoot bugs and implement additional features.
 
 Installation
 ------------
