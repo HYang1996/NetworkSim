@@ -6,3 +6,4 @@ simpy
 numpy
 pandas
 joblib
+tqdm
