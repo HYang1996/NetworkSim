@@ -1,8 +1,6 @@
 __all__ = ["BaseTransmitter"]
 __author__ = ["Hongyi Yang"]
 
-import pandas as pd
-
 from NetworkSim.architecture.setup.model import Model
 from NetworkSim.simulation.tools.clock import TransmitterDataClock, ControlClock, ReceiverDataClock
 
@@ -19,52 +17,68 @@ class BaseTransmitter:
         The RAM at which the transmitter access its information.
     transmitter_id : int
         The transmitter ID.
+    simulator : BaseSimulator
+        The simulator used.
     model : Model, optional
         The network model used for the simulation.
         Default is ``Model()``.
 
     Attributes
     ----------
-    transmitted_data_packet_df : pandas DataFrame
-        A DataFrame keeping the information of the transmitted data packets, containing the columns:
+    transmitted_data_packet : list
+        A list keeping the information of the transmitted data packets, containing the columns:
 
         - `Timestamp`
         - `Raw Packet`
         - `Destination ID`
-    transmitted_control_packet_df : pandas DataFrame
-        A DataFrame keeping the information of the transmitted control packets, containing the columns:
+    transmitted_control_packet : list
+        A list keeping the information of the transmitted control packets, containing the columns:
 
         - `Timestamp`
         - `Raw Packet`
         - `Destination ID`
     """
+
     def __init__(
             self,
             env,
             ram,
             transmitter_id,
+            simulator,
             model=None
     ):
         self.env = env
         self.ram = ram
         self.transmitter_id = transmitter_id
+        self.simulator = simulator
         if model is None:
             model = Model()
         self.model = model
-        self.transmitter_data_clock_cycle = TransmitterDataClock(model=model).clock_cycle
-        self.receiver_data_clock_cycle = ReceiverDataClock(model=model).clock_cycle
-        self.control_clock_cycle = ControlClock(model=model).clock_cycle
-        data = []
-        self.transmitted_data_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Destination ID'
-        ])
-        self.transmitted_control_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Destination ID'
-        ])
+        self._transmitter_data_clock_cycle = TransmitterDataClock(model=model).clock_cycle
+        self._receiver_data_clock_cycle = ReceiverDataClock(model=model).clock_cycle
+        self._control_clock_cycle = ControlClock(model=model).clock_cycle
+        self.transmitted_data_packet = []
+        self.transmitted_control_packet = []
+        self._tunable_keywords = {'tunable', 't', 'T'}
+
+    def get_packet_from_ram(self):
+        """
+        Get first packet from RAM queue.
+
+        Returns
+        -------
+        generation_timestamp : float
+            Time of packet generation.
+        data_packet : str
+            Data packet to be transmitted.
+        destination_id : int
+            The ID of the destination node.
+        """
+        generation_timestamp, data_packet, destination_id = self.ram.queue.popleft()
+        self.ram.record_queue_size()
+        self.ram.pop_from_queue_record.append([generation_timestamp, data_packet, destination_id])
+        self.simulator.ram_queue_delay.append(self.env.now - generation_timestamp)
+        return generation_timestamp, data_packet, destination_id
 
     def transmit_control_packet(self, packet, destination_id, generation_timestamp):
         """
@@ -90,13 +104,13 @@ class BaseTransmitter:
             destination_id=destination_id
         )
         # Store control packet information
-        self.transmitted_control_packet_df = self.transmitted_control_packet_df.append({
-            'Timestamp': self.env.now,
-            'Raw Packet': packet,
-            'Destination ID': destination_id
-        }, ignore_index=True)
+        self.transmitted_control_packet.append([
+            self.env.now,
+            packet,
+            destination_id
+        ])
 
-    def transmit_data_packet(self, packet, destination_id, generation_timestamp):
+    def transmit_data_packet(self, ring_id, packet, destination_id, generation_timestamp):
         """
         Data packet transmission function.
 
@@ -104,6 +118,8 @@ class BaseTransmitter:
 
         Parameters
         ----------
+        ring_id : int
+            The ID of the data ring on which the packet is transmitted.
         packet : packet
             The data packet.
         destination_id : int
@@ -112,7 +128,7 @@ class BaseTransmitter:
             The timestamp when the data packet is generated and stored in RAM.
         """
         # Add data packet onto the ring
-        self.model.data_rings[self.transmitter_id].add_packet(
+        self.model.data_rings[ring_id].add_packet(
             packet=packet,
             generation_timestamp=generation_timestamp,
             transmission_timestamp=self.env.now,
@@ -120,45 +136,38 @@ class BaseTransmitter:
             destination_id=destination_id
         )
         # Store data packet information
-        self.transmitted_data_packet_df = self.transmitted_data_packet_df.append({
-            'Timestamp': self.env.now,
-            'Raw Packet': packet,
-            'Destination ID': destination_id
-        }, ignore_index=True)
+        self.transmitted_data_packet.append([
+            self.env.now,
+            packet,
+            destination_id
+        ])
 
-    def transmit_without_checking(self):
-        """
-        A dummy transmitter to transmit data packets without checking ring slot availability.
-        """
-        while True:
-            if len(self.ram.queue) != 0:
-                # Obtain packet information in the queue
-                generation_timestamp, data_packet, destination_id = self.ram.queue.pop(0)
-                # Transmit the data packet
-                self.transmit_data_packet(
-                    packet=data_packet,
-                    destination_id=destination_id,
-                    generation_timestamp=generation_timestamp
-                )
-            yield self.env.timeout(self.data_clock_cycle)
-
-    def ring_is_full(self):
+    def ring_is_full(self, ring_id):
         """
         Function to check if the data ring is fully occupied.
+
+        Parameters
+        ----------
+        ring_id : int
+            The ID of the data ring on which the packet is transmitted.
 
         Returns
         -------
         ring_is_full : bool
             ``True`` if the data ring is full, otherwise ``False``.
         """
-        if self.model.data_rings[self.transmitter_id].packet_count == self.model.get_max_data_packet_num_on_ring():
+        if self.model.data_rings[ring_id].packet_count == self.model.max_data_packet_num_on_ring:
             return True
-        else:
-            return False
+        return False
 
-    def check_data_packet(self):
+    def check_data_packet(self, ring_id):
         """
         Function to check if there is a data packet present at the transmitter
+
+        Parameters
+        ----------
+        ring_id : int
+            The ID of the data ring on which the packet is transmitted.
 
         Returns
         -------
@@ -174,12 +183,12 @@ class BaseTransmitter:
             - `entry_node_id`
             - `destination_node_id`
         """
-        return self.model.data_rings[self.transmitter_id].check_packet(
+        return self.model.data_rings[ring_id].check_packet(
             current_time=self.env.now,
             node_id=self.transmitter_id
         )
 
-    def check_data_packet_after_guard_interval(self):
+    def check_data_packet_after_guard_interval(self, ring_id):
         """
         Function to check if there is a data packet present at the transmitter after the guard interval
 
@@ -197,8 +206,8 @@ class BaseTransmitter:
             - `entry_node_id`
             - `destination_node_id`
         """
-        return self.model.data_rings[self.transmitter_id].check_packet(
-            current_time=self.env.now + self.model.constants.get("data_guard_interval"),
+        return self.model.data_rings[ring_id].check_packet(
+            current_time=self.env.now + self.model.constants.get('data_guard_interval'),
             node_id=self.transmitter_id
         )
 
@@ -237,14 +246,8 @@ class BaseTransmitter:
         return self.model.control_signal.generate_packet(
             source=self.transmitter_id,
             destination=destination,
-            control=control
+            control_code=control
         )
-
-    def transmit_on_both_rings(self):
-        """
-        Process to transmit control and data packets.
-        """
-        raise NotImplementedError("This is an abstract packet transmission process method.")
 
     def transmit_on_data_ring(self):
         """
@@ -262,5 +265,6 @@ class BaseTransmitter:
         """
         Initialisation of the transmitter simulation.
         """
-        self.env.process(self.transmit_on_control_ring())
+        if self.simulator.receiver_type in self._tunable_keywords:
+            self.env.process(self.transmit_on_control_ring())
         self.env.process(self.transmit_on_data_ring())

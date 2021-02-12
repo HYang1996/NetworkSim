@@ -35,6 +35,7 @@ class TR(BaseReceiver):
         - `Raw Packet`
         - `Source ID`
     """
+
     def __init__(
             self,
             env,
@@ -51,7 +52,6 @@ class TR(BaseReceiver):
             model=model
         )
         self.data_packet_received = True
-        self.queue = []
 
     def receive_on_control_ring(self):
         """
@@ -79,7 +79,7 @@ class TR(BaseReceiver):
                     self.ram_queue_input(packet=packet)
                     # Remove packet from the ring, keep a record of its information
                     self.receive_control_packet(packet=packet)
-            yield self.env.timeout(self.receiver_data_clock_cycle)
+            yield self.env.timeout(self._receiver_data_clock_cycle)
 
     def receive_on_data_ring(self):
         """
@@ -100,29 +100,31 @@ class TR(BaseReceiver):
                 # Assign flag
                 self.data_packet_received = False
                 # Obtain the first control packet in RAM queue
-                control_packet = self.queue.pop(0)
+                _control_packet = self.queue.popleft()
                 # Tune to incoming data packet wavelength
-                ring_id = self.ram_queue_output(control_packet)
+                _transmitter_id = self.ram_queue_output(_control_packet)
                 # Wait for the data packet
                 while (not self.data_packet_received) and (self.env.now <= self.until):
                     # Receive data packet
-                    present, packet = self.check_data_packet(ring_id=ring_id)
-                    time_difference = self.env.now - control_packet[6]
+                    _present, _packet = self.check_data_packet(ring_id=_transmitter_id)
+                    _time_difference = self.env.now - _control_packet[6]
                     # Check if a data packet is received and time is correct
-                    if present and \
-                            (np.isclose(time_difference % self.model.circulation_time, 0, atol=1e-2) or
-                             np.isclose(time_difference % self.model.circulation_time,
+                    if _present and \
+                            (np.isclose(_time_difference % self.model.circulation_time, 0, atol=1e-2) or
+                             np.isclose(_time_difference % self.model.circulation_time,
                                         self.model.circulation_time, atol=1e-2)):
                         # Remove packet from the ring and keep a record of its information
-                        self.record_error(packet)
-                        self.receive_data_packet(ring_id=ring_id, packet=packet)
+                        self.record_error(_packet)
+                        self.receive_data_packet(ring_id=_transmitter_id, packet=_packet)
                         # Wait for the end of the data packet
                         yield self.env.timeout(self.model.data_packet_duration)
                         # Record latency information
-                        self.record_latency(packet=packet)
+                        self.record_latency(packet=_packet)
                         # Assign flag
                         self.data_packet_received = True
+                        # Sync with clock
+                        yield self.env.timeout(self._time_compensation)
                     else:
-                        yield self.env.timeout(1)
+                        yield self.env.timeout(self._receiver_data_clock_cycle)
             else:
-                yield self.env.timeout(1)
+                yield self.env.timeout(self._receiver_data_clock_cycle)

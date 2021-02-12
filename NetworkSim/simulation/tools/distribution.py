@@ -27,8 +27,8 @@ class Distribution:
         if model is None:
             model = Model()
         self.model = model
-        self.pareto_position_parameter, self.pareto_shape_parameter = self.get_pareto_parameters()
-        self.poisson_position_parameter, self.poisson_shape_parameter, self.poisson_lambda = \
+        self._pareto_position_parameter, self._pareto_shape_parameter = self.get_pareto_parameters()
+        self._poisson_position_parameter, self._poisson_shape_parameter, self.poisson_lambda = \
             self.get_poisson_parameters()
         np.random.seed(seed)
 
@@ -74,13 +74,13 @@ class Distribution:
         .. [3] Gebali, F., 2008. Analysis of computer and communication networks. Springer Science & Business Media.
         """
         # Burst rate to each node, in packets/s
-        sigma = self.model.constants.get('maximum_bit_rate') / self.model.data_signal.size / 8
+        _sigma = self.model.constants.get('maximum_bit_rate') / self.model.data_signal.size / 8
         # Position parameter, in ns
-        position_parameter = 1 / sigma
+        position_parameter = 1 / _sigma
         # Shape parameter, in ns^-1 (average rate to to each node)
-        lambda_a = self.model.constants.get('average_bit_rate') / self.model.data_signal.size / 8
-        shape_parameter = (sigma * lambda_a) / (sigma - lambda_a)
-        return position_parameter, shape_parameter, lambda_a
+        _lambda_a = self.model.constants.get('average_bit_rate') / self.model.data_signal.size / 8
+        shape_parameter = (_sigma * _lambda_a) / (_sigma - _lambda_a)
+        return position_parameter, shape_parameter, _lambda_a
 
     def poisson(self):
         """
@@ -90,7 +90,7 @@ class Distribution:
         -------
         A new interarrival time calculated from the Poisson distribution.
         """
-        return np.random.exponential(scale=1 / self.poisson_shape_parameter) + self.poisson_position_parameter
+        return np.random.exponential(scale=1 / self._poisson_shape_parameter) + self._poisson_position_parameter
 
     def get_pareto_parameters(self):
         """
@@ -128,11 +128,11 @@ class Distribution:
         access nodes. Photonic Network Communications, 13(3), pp.289-295.
         """
         # Calculate shape parameter
-        sigma = self.model.constants.get('maximum_bit_rate') / self.model.data_signal.size / 8
-        lambda_a = self.model.constants.get('average_bit_rate') / self.model.data_signal.size / 8
-        shape_parameter = sigma / (sigma - lambda_a)
+        _sigma = self.model.constants.get('maximum_bit_rate') / self.model.data_signal.size / 8
+        _lambda_a = self.model.constants.get('average_bit_rate') / self.model.data_signal.size / 8
+        shape_parameter = _sigma / (_sigma - _lambda_a)
         # Calculate position parameter
-        position_parameter = 1 / sigma
+        position_parameter = 1 / _sigma
         return position_parameter, shape_parameter
 
     def pareto(self):
@@ -143,4 +143,4 @@ class Distribution:
         -------
         A new interarrival time calculated from the Pareto distribution.
         """
-        return (np.random.pareto(a=self.pareto_shape_parameter) + 1) * self.pareto_position_parameter
+        return (np.random.pareto(a=self._pareto_shape_parameter) + 1) * self._pareto_position_parameter

@@ -20,6 +20,7 @@ class TransmitterDataClock:
     clock_cycle : float
         The clock cycle of the synchronised data clock.
     """
+
     def __init__(
             self,
             model=None
@@ -39,7 +40,7 @@ class TransmitterDataClock:
             The calculated clock cycle for data packet transmission.
         """
         # Calculate clock cycle and check if it is a good option for simulation
-        if self.model.get_max_data_packet_num_on_ring() % 2 != 0:
+        if int(self.model.get_max_data_packet_num_on_ring()) & 1:
             raise ValueError('This configuration would result in data packet '
                              'transmission clock cycle not being a suitable number.')
         else:
@@ -60,6 +61,7 @@ class ReceiverDataClock(TransmitterDataClock):
     clock_cycle : float
         The clock cycle of the synchronised data clock.
     """
+
     def __init__(
             self,
             model=None
@@ -93,6 +95,7 @@ class ControlClock:
     clock_cycle : float
         The clock cycle of the synchronised control clock.
     """
+
     def __init__(
             self,
             model=None
@@ -112,8 +115,8 @@ class ControlClock:
             The calculated clock cycle for control packet transmission.
         """
         # Calculate clock cycle and check if it is a good option for simulation
-        if self.model.get_max_control_packet_num_on_ring() % 2 != 0:
-            raise ValueError('This configuration would result in control packet '
-                             'transmission clock cycle not being a suitable number.')
+        if int(self.model.get_max_control_packet_num_on_ring()) & 1:
+            raise ValueError("This configuration would result in control packet "
+                             "transmission clock cycle not being a suitable number.")
         else:
             return self.model.circulation_time / self.model.get_max_control_packet_num_on_ring()

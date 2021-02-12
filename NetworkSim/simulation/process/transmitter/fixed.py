@@ -6,7 +6,7 @@ from NetworkSim.simulation.process.transmitter.base import BaseTransmitter
 
 class FT(BaseTransmitter):
     """
-    Fixed Transmitter simulator.
+    Fixed transmitter simulator.
 
     Parameters
     ----------
@@ -16,35 +16,41 @@ class FT(BaseTransmitter):
         The RAM at which the transmitter access its information.
     transmitter_id : int
         The transmitter ID.
+    simulator : BaseSimulator
+        The simulator used.
     model : Model, optional
         The network model used for the simulation.
         Default is ``Model()``.
 
     Attributes
     ----------
-    transmitted_data_packet_df : pandas DataFrame
-        A DataFrame keeping the information of the transmitted data packets, containing the columns:
+    transmitted_data_packet : list
+        A list keeping the information of the transmitted data packets, containing the columns:
 
         - `Timestamp`
         - `Raw Packet`
         - `Destination ID`
-    transmitted_control_packet_df : pandas DataFrame
-        A DataFrame keeping the information of the transmitted control packets, containing the columns:
+    transmitted_control_packet : list
+        A list keeping the information of the transmitted control packets, containing the columns:
 
         - `Timestamp`
         - `Raw Packet`
         - `Destination ID`
     """
+
     def __init__(
             self,
             env,
             ram,
             transmitter_id,
-            model=None):
+            simulator,
+            model=None
+    ):
         super().__init__(
             env=env,
             ram=ram,
             transmitter_id=transmitter_id,
+            simulator=simulator,
             model=model
         )
         self.control_packet_transmitted = False
@@ -66,13 +72,13 @@ class FT(BaseTransmitter):
         """
         while True:
             # Check if RAM is not empty and if previous data packet has been transmitted
-            if self.ram.queue and not self.ring_is_full():
+            if self.ram.queue and not self.ring_is_full(self.transmitter_id):
                 # Check if both control and data rings are available
                 control_packet_present, control_packet = self.check_control_packet()
-                data_packet_present, data_packet = self.check_data_packet_after_guard_interval()
+                data_packet_present, _ = self.check_data_packet(self.transmitter_id)
                 if not control_packet_present and not data_packet_present:
                     # Obtain packet information in the queue
-                    generation_timestamp, data_packet, destination_id = self.ram.queue[0]
+                    generation_timestamp, _, destination_id = self.ram.queue[0]
                     # Generate control packet
                     control_packet = self.generate_control_packet(destination=destination_id, control=0)
                     # Transmit the control packet
@@ -82,11 +88,13 @@ class FT(BaseTransmitter):
                         generation_timestamp=generation_timestamp
                     )
                     self.control_packet_transmitted = True
-            yield self.env.timeout(self.transmitter_data_clock_cycle)
+            yield self.env.timeout(self._transmitter_data_clock_cycle)
 
     def transmit_on_data_ring(self):
         """
         Fixed Transmitter process to add a new data packet onto the ring.
+
+        For FT-TR model.
 
         In this process:
 
@@ -94,16 +102,19 @@ class FT(BaseTransmitter):
         2. The data packet is added onto its respective ring.
         """
         while True:
-            # self.env.timeout(self.model.constants.get("data_guard_interval"))
             # Check if a control packet has been transmitted
             if self.control_packet_transmitted:
                 # Remove packet from RAM queue
-                generation_timestamp, data_packet, destination_id = self.ram.queue.pop(0)
+                generation_timestamp, data_packet, destination_id = self.ram.queue.popleft()
+                self.ram.record_queue_size()
+                # For unit test
+                self.ram.pop_from_queue_record.append([generation_timestamp, data_packet, destination_id])
                 # Transmit the data packet
                 self.transmit_data_packet(
+                    ring_id=self.transmitter_id,
                     packet=data_packet,
                     destination_id=destination_id,
                     generation_timestamp=generation_timestamp
                 )
                 self.control_packet_transmitted = False
-            yield self.env.timeout(self.transmitter_data_clock_cycle)
+            yield self.env.timeout(self._transmitter_data_clock_cycle)

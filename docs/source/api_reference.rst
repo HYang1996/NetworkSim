@@ -11,6 +11,27 @@ API Reference
 
 .. _architecture_ref:
 
+Network Signal Configuration
+============================
+
+The :mod:`NetworkSim.architecture.signal` module contains definitions of the control and data signals used in the ring network.
+
+.. automodule:: NetworkSim.architecture.signal
+    :no-members:
+    :no-inherited-members:
+
+Signal Configuration
+--------------------
+
+.. currentmodule:: NetworkSim.architecture.signal
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: class.rst
+
+    ControlSignal
+    DataSignal
+
 Network Architecture Base Configuration
 =======================================
 
@@ -84,6 +105,18 @@ The :mod:`NetworkSim.simulation.tools` module contains essential tools used for 
     :no-members:
     :no-inherited-members:
 
+Network Performance Analysis
+----------------------------
+
+.. currentmodule:: NetworkSim.simulation.tools.performance_analysis
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: function.rst
+
+    get_transfer_delay
+    get_throughput
+
 Probability Distributions for Discrete Event Simulation
 -------------------------------------------------------
 
@@ -107,6 +140,28 @@ Synchronised Clocks
     TransmitterDataClock
     ReceiverDataClock
     ControlClock
+
+Simulation Information
+----------------------
+
+.. currentmodule:: NetworkSim.simulation.tools.info
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: class.rst
+
+    Info
+
+Simulation Summary
+------------------
+
+.. currentmodule:: NetworkSim.simulation.tools.summary
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: class.rst
+
+    Summary
 
 Simulation Processes
 ====================
@@ -139,6 +194,7 @@ Transmitter Process
 
     BaseTransmitter
     FT
+    TT
 
 Receiver Process
 ----------------
@@ -150,26 +206,39 @@ Receiver Process
     :template: class.rst
 
     BaseReceiver
+    FR
     TR
 
 Simulation Setup
 ================
 
-The :mod:`NetworkSim.simulation.setup` module contains a wrapper to set up all necessary processes for the simulation.
+The :mod:`NetworkSim.simulation.simulator` module contains a wrapper to set up all necessary processes for the simulation.
 
-.. automodule:: NetworkSim.simulation.setup
+.. automodule:: NetworkSim.simulation.simulator
     :no-members:
     :no-inherited-members:
 
-Simulation Wrapper
-------------------
+Basic Simulation Wrapper
+------------------------
 
-.. currentmodule:: NetworkSim.simulation.setup.simulator
+.. currentmodule:: NetworkSim.simulation.simulator.base
 
 .. autosummary::
     :toctree: modules/auto_generated/
     :template: class.rst
 
-    Simulator
+    BaseSimulator
+
+Parallel Simulation
+-------------------
+
+.. currentmodule:: NetworkSim.simulation.simulator.parallel
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: class.rst
+
+    ParallelSimulator
+
 
 

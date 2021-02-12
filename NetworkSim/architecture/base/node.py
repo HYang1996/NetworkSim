@@ -71,31 +71,10 @@ class Node:
         self.control_signal = control_signal
         self.data_signal = data_signal
         self.network = network
-        data = []
-        self.generated_control_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Source ID',
-            'Destination ID',
-            'Control Code'
-        ])
-        self.received_control_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Source ID',
-            'Destination ID',
-            'Control Code'
-        ])
-        self.generated_data_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Destination ID'
-        ])
-        self.received_data_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Source ID',
-        ])
+        self.generated_control_packet = []
+        self.received_control_packet = []
+        self.generated_data_packet = []
+        self.received_data_packet = []
 
     def interpret_control_packet(self, packet):
         """
@@ -115,27 +94,35 @@ class Node:
             Control code in decimal.
         """
         # Check type and length of the incoming packet
-        if not isinstance(packet, str):
-            raise ValueError('Signal input must be a string')
-        total_length = 2 * self.control_signal.id_length + self.control_signal.control_length
-        if len(packet) != total_length:
-            raise ValueError(f'Signal bit length is incorrect, expecting {total_length} bits.')
-        # Separate signal into 3 parts
-        packet_source = packet[0:self.control_signal.id_length]
-        packet_destination = packet[self.control_signal.id_length: 2 * self.control_signal.id_length]
-        packet_code = packet[2 * self.control_signal.id_length:]
-        source_id = int(packet_source, 2)
-        destination_id = int(packet_destination, 2)
-        control_code = int(packet_code, 2)
-        return source_id, destination_id, control_code
+        if self.control_signal.abstract:
+            if not isinstance(packet, list):
+                raise ValueError('Abstract signal must be a list.')
+        else:
+            if not isinstance(packet, str):
+                raise ValueError('Signal input must be a string.')
+        # Control packet interpretation
+        if self.control_signal.abstract:
+            return packet[0], packet[1], packet[2]
+        else:
+            _total_length = 2 * self.control_signal.id_length + self.control_signal.control_length
+            if len(packet) != _total_length:
+                raise ValueError(f'Signal bit length is incorrect, expecting {_total_length} bits.')
+            # Separate signal into 3 parts
+            _packet_source = packet[0:self.control_signal.id_length]
+            _packet_destination = packet[self.control_signal.id_length: 2 * self.control_signal.id_length]
+            _packet_code = packet[2 * self.control_signal.id_length:]
+            source_id = int(_packet_source, 2)
+            destination_id = int(_packet_destination, 2)
+            control_code = int(_packet_code, 2)
+            return source_id, destination_id, control_code
 
-    def generate_control_packet(self, destination_node, control_code, timestamp):
+    def generate_control_packet(self, destination_id, control_code, timestamp):
         """
         Control packet generation.
 
         Parameters
         ----------
-        destination_node : int
+        destination_id : int
             The node ID of the destination node.
         control_code : int
             The control code in decimal.
@@ -148,21 +135,20 @@ class Node:
             A string representation of the control packet in binary.
         """
         # Check input type
-        if not isinstance(destination_node, Node):
-            raise ValueError('A Node object must be used as an argument.')
+        if not isinstance(destination_id, int):
+            raise ValueError('Destination node ID must be an integer.')
         control_packet = self.control_signal.generate_packet(
             source=self.node_id,
-            destination=destination_node.node_id,
-            control=control_code
+            destination=destination_id,
+            control_code=control_code
         )
-        self.generated_control_packet_df = \
-            self.generated_control_packet_df.append({
-                'Timestamp': timestamp,
-                'Raw Packet': control_packet,
-                'Source ID': self.node_id,
-                'Destination ID': destination_node.node_id,
-                'Control Code': control_code
-            }, ignore_index=True)
+        self.generated_control_packet.append([
+            timestamp,
+            control_packet,
+            self.node_id,
+            destination_id,
+            control_code
+        ])
         return control_packet
 
     def store_received_control_packet(self, packet, timestamp):
@@ -178,19 +164,23 @@ class Node:
             The timestamp when the control packet is received.
         """
         # Check type and length of the incoming packet
-        if not isinstance(packet, str):
-            raise ValueError('Signal input must be a string')
-        total_length = 2 * self.control_signal.id_length + self.control_signal.control_length
-        if len(packet) != total_length:
-            raise ValueError(f'Signal bit length is incorrect, expecting {total_length} bits.')
+        if self.control_signal.abstract:
+            if not isinstance(packet, list):
+                raise ValueError('Abstract control packet must be a list.')
+        else:
+            if not isinstance(packet, str):
+                raise ValueError('Signal input must be a string')
+            total_length = 2 * self.control_signal.id_length + self.control_signal.control_length
+            if len(packet) != total_length:
+                raise ValueError(f'Signal bit length is incorrect, expecting {total_length} bits.')
         source_id, destination_id, control_code = self.interpret_control_packet(packet=packet)
-        self.received_control_packet_df = self.received_control_packet_df.append({
-            'Timestamp': timestamp,
-            'Raw Packet': packet,
-            'Source ID': source_id,
-            'Destination ID': destination_id,
-            'Control Code': control_code
-        }, ignore_index=True)
+        self.received_control_packet.append([
+            timestamp,
+            packet,
+            source_id,
+            destination_id,
+            control_code
+        ])
 
     def generate_data_packet(self, destination_id, timestamp):
         """
@@ -212,11 +202,11 @@ class Node:
         if not isinstance(destination_id, int):
             raise ValueError('Destination node ID must be an integer.')
         data_packet = self.data_signal.generate_packet()
-        self.generated_data_packet_df = self.generated_data_packet_df.append({
-            'Timestamp': timestamp,
-            'Raw Packet': data_packet,
-            'Destination ID': destination_id
-        }, ignore_index=True)
+        self.generated_data_packet.append([
+            timestamp,
+            data_packet,
+            destination_id
+        ])
         return data_packet
 
     def store_received_data_packet(self, packet, source_id, timestamp):
@@ -234,17 +224,18 @@ class Node:
             The timestamp when the data packet is received.
         """
         # Check type and length of the incoming packet
-        if not isinstance(packet, str):
-            raise ValueError('Signal input must be a string')
+        if not self.data_signal.abstract:
+            if not isinstance(packet, str):
+                raise ValueError('Signal input must be a string')
+            if len(packet) != 8 * self.data_signal.size:
+                raise ValueError(f'Signal bit length is incorrect, expecting {8 * self.data_signal.size} bits.')
         if not isinstance(source_id, int):
             raise ValueError('Source node ID must be an integer.')
-        if len(packet) != 8 * self.data_signal.size:
-            raise ValueError(f'Signal bit length is incorrect, expecting {8 * self.data_signal.size} bits.')
-        self.received_data_packet_df = self.received_data_packet_df.append({
-            'Timestamp': timestamp,
-            'Raw Packet': packet,
-            'Source ID': source_id
-        }, ignore_index=True)
+        self.received_data_packet.append([
+            timestamp,
+            packet,
+            source_id
+        ])
 
     def get_distance_to(self, end_node):
         """

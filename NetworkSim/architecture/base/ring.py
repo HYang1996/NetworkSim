@@ -2,7 +2,6 @@ __all__ = ["Ring"]
 __author__ = ["Hongyi Yang"]
 
 import numpy as np
-import pandas as pd
 
 
 class Ring:
@@ -44,13 +43,25 @@ class Ring:
             The ID of the node where the packet was added.
         - `destination_node_id` : int
             The ID of the destination of the packet.
-    packet_record_df : pandas DataFrame
-        A DataFrame containing the information on all packet transmission on the ring, including the columns:
+    packet_record : list
+        A list containing the information on all packet transmission on the ring, including the columns:
 
         - `Generation Timestamp` : float
             The timestamp when the packet is generated and stored in the RAM.
         - `Transmission Timestamp` : float
             The timestamp when the packet is added onto the ring by the transmitter.
+        - `Reception Timestamp` : float
+            The timestamp when the packet is received by the receiver.
+        - `Raw Packet` : str
+            The raw packet content.
+        - `Source Node` : int
+            The ID of the source node.
+        - `Destination Node` : int
+            The ID of the destination node.
+        - `Status` : str
+            The status of the packet, can be ``added`` or ``removed``.
+        - Total Packet Count : int
+            The total number of packets on the ring at the time of the operation.
     """
 
     def __init__(
@@ -64,17 +75,7 @@ class Ring:
         self.nodes_location = self.get_nodes_location()
         self.packets = []
         self.packet_count = 0
-        data = []
-        self.packet_record_df = pd.DataFrame(data, columns=[
-            'Generation Timestamp',
-            'Transmission Timestamp',
-            'Reception Timestamp',
-            'Raw Packet',
-            'Source Node',
-            'Destination Node',
-            'Status',
-            'Total Packet Count'
-        ])
+        self.packet_record = []
         self.time_unit = time_unit
 
     def get_nodes_location(self):
@@ -112,8 +113,6 @@ class Ring:
         # Check input types
         if not isinstance(node_id, int):
             raise ValueError('Input node_id must be an integer.')
-        if not isinstance(packet, str):
-            raise ValueError('Input packet must be str')
 
         # Add packet to the ring
         self.packets.append([
@@ -125,15 +124,16 @@ class Ring:
             destination_id
         ])
         self.packet_count += 1
-        self.packet_record_df = self.packet_record_df.append({
-            'Generation Timestamp': generation_timestamp,
-            'Transmission Timestamp': transmission_timestamp,
-            'Raw Packet': packet,
-            'Source Node': node_id,
-            'Destination Node': destination_id,
-            'Status': 'added',
-            'Total Packet Count': self.packet_count
-        }, ignore_index=True)
+        self.packet_record.append([
+            generation_timestamp,
+            transmission_timestamp,
+            None,
+            packet,
+            node_id,
+            destination_id,
+            'added',
+            self.packet_count
+        ])
 
     def remove_packet(self, node_id, packet, reception_timestamp):
         """
@@ -158,16 +158,16 @@ class Ring:
         """
         self.packets.remove(packet)
         self.packet_count -= 1
-        self.packet_record_df = self.packet_record_df.append({
-            'Generation Timestamp': packet[1],
-            'Transmission Timestamp': packet[2],
-            'Reception Timestamp': reception_timestamp,
-            'Raw Packet': packet[0],
-            'Source Node': packet[4],
-            'Destination Node': node_id,
-            'Status': 'removed',
-            'Total Packet Count': self.packet_count
-        }, ignore_index=True)
+        self.packet_record.append([
+            packet[1],
+            packet[2],
+            reception_timestamp,
+            packet[0],
+            packet[4],
+            node_id,
+            'removed',
+            self.packet_count
+        ])
 
     def check_packet(self, current_time, node_id):
         """
@@ -201,10 +201,15 @@ class Ring:
         for packet in self.packets:
             # Compare current location of packet with node location with time in ns
             if self.time_unit == 'ns':
-                new_location = packet[3] + (current_time - packet[2]) * self.model.constants.get('speed') * 1e-9
-            if self.time_unit == 's':
-                new_location = packet[3] + (current_time - packet[2]) * self.model.constants.get('speed')
-            new_location_on_ring = new_location % self.model.network.length
+                _new_location = packet[3] + (current_time - packet[2]) * self.model.constants.get('speed') * 1e-9
+            elif self.time_unit == 's':
+                _new_location = packet[3] + (current_time - packet[2]) * self.model.constants.get('speed')
+            else:
+                raise NotImplementedError('Unknown time unit of the simulation.')
+            new_location_on_ring = _new_location % self.model.network.length
+            # Update location when near end of the ring and causing no detection error
+            if np.isclose(new_location_on_ring, self.model.network.length, atol=1e-2):
+                new_location_on_ring = 0
             if np.isclose(new_location_on_ring, self.nodes_location[node_id], atol=1e-2):
                 return True, packet
         # No packet present

@@ -24,6 +24,8 @@ class Model:
         The data signal definition. Default is ``DataSignal()``.
     network : Network, optional
         The network definition. Default is ``Network()``.
+    abstract : bool
+        Abstract representation of control and data packets. Default is ``True``.
 
     Attributes
     ----------
@@ -46,21 +48,27 @@ class Model:
         The total duration of the data packet, including the guard interval.
     circulation_time : float
         The time for one complete circulation around the ring.
+    max_data_packet_num_on_ring : int
+        The maximum number of data packets a ring can contain.
     """
-
-    default_control_signal = ControlSignal()
-    default_data_signal = DataSignal()
-    default_network = Network()
 
     def __init__(
             self,
-            control_signal=default_control_signal,
-            data_signal=default_data_signal,
-            network=default_network
+            control_signal=None,
+            data_signal=None,
+            network=None,
+            abstract=True
     ):
+        if control_signal is None:
+            control_signal = ControlSignal(abstract=abstract)
         self.control_signal = control_signal
+        if data_signal is None:
+            data_signal = DataSignal(abstract=abstract)
         self.data_signal = data_signal
+        if network is None:
+            network = Network()
         self.network = network
+        self.abstract = abstract
         self.nodes = self.generate_nodes()
         self.data_rings = self.generate_data_rings()
         self.control_ring = self.generate_control_ring()
@@ -74,6 +82,7 @@ class Model:
         }
         self.data_packet_duration = self.get_data_packet_total_duration()
         self.circulation_time = self.get_circulation_time()
+        self.max_data_packet_num_on_ring = self.get_max_data_packet_num_on_ring()
 
     def get_circulation_time(self):
         """
@@ -84,7 +93,7 @@ class Model:
         circulation_time : float
             The time taken for one circulation, in ns.
         """
-        return self.network.length / self.constants.get("speed") * 1e9
+        return self.network.length / self.constants.get('speed') * 1e9
 
     def get_data_packet_duration(self):
         """
@@ -92,12 +101,12 @@ class Model:
 
         Returns
         -------
-        total_duration : float
+        packet_duration : float
             Duration of the data packet, in ns
         """
-        # Calculate total time taken by one packet including guard interval
-        bit_duration = 1 / self.constants.get('maximum_bit_rate')
-        packet_duration = bit_duration * self.data_signal.size * 8
+        # Calculate total time taken by one packet excluding guard interval
+        _bit_duration = 1 / self.constants.get('maximum_bit_rate')
+        packet_duration = _bit_duration * self.data_signal.size * 8
         return packet_duration
 
     def get_data_packet_total_duration(self):
@@ -107,12 +116,12 @@ class Model:
         Returns
         -------
         total_duration : float
-            Duration of the data packet, in ns
+            Duration of the data packet with guard interval, in ns
         """
         # Calculate total time taken by one packet including guard interval
-        bit_duration = 1 / self.constants.get('maximum_bit_rate')
-        packet_duration = bit_duration * self.data_signal.size * 8
-        total_duration = packet_duration + self.constants.get('data_guard_interval')
+        _bit_duration = 1 / self.constants.get('maximum_bit_rate')
+        _packet_duration = _bit_duration * self.data_signal.size * 8
+        total_duration = _packet_duration + self.constants.get('data_guard_interval')
         return total_duration
 
     def get_max_data_packet_num_on_ring(self):
@@ -125,11 +134,11 @@ class Model:
             The maximum number of packets allowed.
         """
         # Calculate total time taken by one packet including guard interval
-        total_duration = self.get_data_packet_total_duration()
+        _total_duration = self.get_data_packet_total_duration()
         # Calculate total length of one transmission
-        transmission_length = total_duration * self.constants.get('speed') * 1e-9
+        _transmission_length = _total_duration * self.constants.get('speed') * 1e-9
         # Calculate maximum number of packets that could be fitted on the ring
-        max_packet_num = self.network.length // np.round(transmission_length, decimals=2)
+        max_packet_num = self.network.length // np.round(_transmission_length, decimals=2)
         # Type cast at the end to avoid TypeError: 'numpy.float64' object cannot be interpreted as an integer
         return max_packet_num
 
@@ -154,17 +163,17 @@ class Model:
             The maximum number of packets allowed between two nodes.
         """
         # Calculate total time taken by one packet including guard interval
-        bit_duration = 1 / self.constants.get('maximum_bit_rate')
-        packet_duration = bit_duration * (2 * self.control_signal.id_length + self.control_signal.control_length)
-        total_duration = packet_duration + self.constants.get('control_guard_interval')
+        _bit_duration = 1 / self.constants.get('maximum_bit_rate')
+        _packet_duration = _bit_duration * (2 * self.control_signal.id_length + self.control_signal.control_length)
+        _total_duration = _packet_duration + self.constants.get('control_guard_interval')
         # Calculate total length of one transmission
-        transmission_length = total_duration * self.constants.get('speed') * 1e-9
+        _transmission_length = _total_duration * self.constants.get('speed') * 1e-9
         # Calculate the distance between two node
-        node_interval = self.network.get_interval()
-        if node_interval < transmission_length:
-            raise ValueError('This configuration would result in control packet larger than the node interval.')
+        _node_interval = self.network.get_interval()
+        if _node_interval < _transmission_length:
+            raise ValueError("This configuration would result in control packet larger than the node interval.")
         # Calculate maximum number of packets that could be fitted between two node
-        max_packet_num_between_node = node_interval // np.round(transmission_length, decimals=2)
+        max_packet_num_between_node = _node_interval // np.round(_transmission_length, decimals=2)
         # Type cast at the end to avoid TypeError: 'numpy.float64' object cannot be interpreted as an integer
         return max_packet_num_between_node
 

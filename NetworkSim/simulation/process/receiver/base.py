@@ -1,7 +1,7 @@
 __all__ = ["BaseReceiver"]
 __author__ = ["Hongyi Yang"]
 
-import pandas as pd
+from collections import deque
 
 from NetworkSim.architecture.setup.model import Model
 from NetworkSim.simulation.tools.clock import TransmitterDataClock, ControlClock, ReceiverDataClock
@@ -19,26 +19,28 @@ class BaseReceiver:
         The end time of the simulation.
     receiver_id : int
         The receiver ID.
+    simulator : BaseSimulator
+        The simulator used.
     model : Model, optional
         The network model used for the simulation.
         Default is ``Model()``.
 
     Attributes
     ----------
-    received_data_packet_df : pandas DataFrame
-        A DataFrame keeping the information of the received data packets, containing the columns:
+    received_data_packet : list
+        A list keeping the information of the received data packets, containing the columns:
 
         - `Timestamp`
         - `Raw Packet`
         - `Source ID`
-    received_control_packet_df : pandas DataFrame
-        A DataFrame keeping the information of the received control packets, containing the columns:
+    received_control_packet : list
+        A list keeping the information of the received control packets, containing the columns:
 
         - `Timestamp`
         - `Raw Packet`
         - `Source ID`
-    queue_df : pandas DataFrame
-        A DataFrame keeping the information of the control packets stored in the receiver RAM, including the columns:
+    queue_record : list
+        A list keeping the information of the control packets stored in the receiver RAM, including the columns:
 
         - `Timestamp` : float
             The timestamp when the operation is carried out.
@@ -59,6 +61,7 @@ class BaseReceiver:
         - `destination_node_id`
         - `reception_timestamp`
     """
+
     def __init__(
             self,
             env,
@@ -74,40 +77,48 @@ class BaseReceiver:
         if model is None:
             model = Model()
         self.model = model
-        self.transmitter_data_clock_cycle = TransmitterDataClock(model=model).clock_cycle
-        self.receiver_data_clock_cycle = ReceiverDataClock(model=model).clock_cycle
-        self.control_clock_cycle = ControlClock(model=model).clock_cycle
-        data = []
-        self.received_data_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Source ID'
-        ])
-        self.received_control_packet_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Source ID'
-        ])
-        self.queue_df = pd.DataFrame(data, columns=[
-            'Timestamp',
-            'Raw Packet',
-            'Source ID',
-            'Operation'
-        ])
-        self.queue = []
-        data = []
-        self.latency_df = pd.DataFrame(data, columns=[
-            'Source ID',
-            'Destination ID',
-            'Latency'
-        ])
+        self._transmitter_data_clock_cycle = TransmitterDataClock(model=model).clock_cycle
+        self._receiver_data_clock_cycle = ReceiverDataClock(model=model).clock_cycle
+        self._control_clock_cycle = ControlClock(model=model).clock_cycle
+        self.received_data_packet = []
+        self.received_control_packet = []
+        self.queue_record = []
+        self.queue = deque()
+        self._fixed_keywords = {'fixed', 'f', 'F'}
+        self._tunable_keywords = {'tunable', 't', 'T'}
+        if self.simulator.receiver_type in self._tunable_keywords:
+            self._time_compensation = self._receiver_data_clock_cycle - \
+                (self.model.data_packet_duration % self._receiver_data_clock_cycle)
+        else:
+            self._time_compensation = self._transmitter_data_clock_cycle - self.model.data_packet_duration
 
     def record_error(self, packet):
-        self.simulator.error_df = self.simulator.error_df.append({
-            'Source ID': packet[4],
-            'Destination ID': packet[5],
-            'Error Timestamp': self.env.now
-        }, ignore_index=True)
+        """
+        Check packet information and record error of data packet transmission.
+
+        Parameters
+        ----------
+        packet : packet
+            The data packet
+        """
+        if packet[5] != self.receiver_id:
+            error_type = 'destination ID mismatch'
+            self.simulator.error.append([
+                self.env.now,
+                packet[4],
+                packet[5],
+                error_type
+            ])
+        # Check if packet circulates around the ring in TT-FR configuration
+        if self.simulator.receiver_type in self._fixed_keywords \
+                and self.env.now - packet[2] > self.model.circulation_time:
+            error_type = 'circulation for TT-FR'
+            self.simulator.error.append([
+                self.env.now,
+                packet[4],
+                packet[5],
+                error_type
+            ])
 
     def record_latency(self, packet):
         """
@@ -118,11 +129,15 @@ class BaseReceiver:
         packet : packet
             The control packet.
         """
-        self.simulator.latency_df = self.simulator.latency_df.append({
-            'Source ID': packet[4],
-            'Destination ID': packet[5],
-            'Latency': self.env.now - packet[1]
-        }, ignore_index=True)
+        data_rate = (len(self.simulator.latency) + 1) * self.model.data_signal.size * 8 / self.env.now
+        self.simulator.latency.append({
+            'Latency Timestamp': self.env.now,
+            'Source ID': packet[4],  # Source node
+            'Destination ID': packet[5],  # Destination node
+            'Queueing Delay': packet[2] - packet[1],  # Queueing delay
+            'Transfer Delay': self.env.now - packet[1],  # Transfer delay
+            'Data Rate': data_rate
+        })
 
     def control_id_match(self, packet):
         """
@@ -142,8 +157,7 @@ class BaseReceiver:
         source_id, destination_id, control_code = self.interpret_control_packet(packet)
         if destination_id == self.receiver_id:
             return True
-        else:
-            return False
+        return False
 
     def get_original_control_packet(self, packet):
         """
@@ -166,17 +180,17 @@ class BaseReceiver:
         raw_control_packet = self.model.control_signal.generate_packet(
             source=source_id,
             destination=destination_id,
-            control=control
+            control_code=control
         )
         # Return the control packet in receiver RAM queue with the same raw packet and correct circulation time
-        circulation_time = self.model.network.length / self.model.constants.get("speed")
+        _circulation_time = self.model.network.length / self.model.constants.get('speed')
         for packet in self.queue:
             time_difference = self.env.now - packet[6]
-            if packet[0] == raw_control_packet and time_difference % circulation_time == 0:
+            if packet[0] == raw_control_packet and not (time_difference % _circulation_time):
                 return packet
         return None
 
-    def ram_queue_input(self, packet, priority="low"):
+    def ram_queue_input(self, packet, priority='low'):
         """
         Handling input to the receiver RAM queue.
 
@@ -195,11 +209,11 @@ class BaseReceiver:
         # Interpret control packet information and store its information
         source_id, destination_id, control_code = self.interpret_control_packet(packet)
         # Determine and perform control packet operation
-        if control_code == 0:  # Packet added
+        if not control_code:  # Packet added
             operation = "Added"
             packet.append(self.env.now)
-            if priority == "high":
-                self.queue.insert(0, packet)
+            if priority == 'high':
+                self.queue.appendleft(packet)
             else:
                 self.queue.append(packet)
         elif control_code == 1:  # Previously added packet now removed
@@ -209,12 +223,12 @@ class BaseReceiver:
         else:
             operation = "Unknown"
         # Record RAM queue information
-        self.queue_df = self.queue_df.append({
-            'Timestamp': self.env.now,
-            'Raw Packet': packet[0],
-            'Source ID': packet[4],
-            'Operation': operation
-        }, ignore_index=True)
+        self.queue_record.append([
+            self.env.now,
+            packet[0],
+            packet[4],
+            operation
+        ])
 
     def receive_control_packet(self, packet):
         """
@@ -235,11 +249,11 @@ class BaseReceiver:
             reception_timestamp=self.env.now
         )
         # Store control packet information
-        self.received_control_packet_df = self.received_control_packet_df.append({
-            'Timestamp': self.env.now,
-            'Raw Packet': packet[0],
-            'Source ID': packet[4]
-        }, ignore_index=True)
+        self.received_control_packet.append([
+            self.env.now,
+            packet[0],
+            packet[4]
+        ])
 
     def ram_queue_output(self, packet):
         """
@@ -259,12 +273,12 @@ class BaseReceiver:
         source_id, destination_id, control_code = self.interpret_control_packet(packet)
         # Record RAM queue information
         operation = "Processed"
-        self.queue_df = self.queue_df.append({
-            'Timestamp': self.env.now,
-            'Raw Packet': packet[0],
-            'Source ID': packet[4],
-            'Operation': operation
-        }, ignore_index=True)
+        self.queue_record.append([
+            self.env.now,
+            packet[0],
+            packet[4],
+            operation
+        ])
         # Return the receiving ring to tune to
         return source_id
 
@@ -289,11 +303,11 @@ class BaseReceiver:
             reception_timestamp=self.env.now
         )
         # Store data packet information
-        self.received_data_packet_df = self.received_data_packet_df.append({
-            'Timestamp': self.env.now,
-            'Raw Packet': packet[0],
-            'Source ID': packet[4]
-        }, ignore_index=True)
+        self.received_data_packet.append([
+            self.env.now,
+            packet[0],
+            packet[4]
+        ])
 
     def check_data_packet(self, ring_id):
         """
@@ -394,5 +408,6 @@ class BaseReceiver:
         - Reception of control packets
         - Reception of data packets
         """
-        self.env.process(self.receive_on_control_ring())
+        if self.simulator.receiver_type in self._tunable_keywords:
+            self.env.process(self.receive_on_control_ring())
         self.env.process(self.receive_on_data_ring())

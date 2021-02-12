@@ -17,6 +17,11 @@ class Network:
     direction: int, optional
         Direction of travel of the signals (``1`` or ``-1``).
         Default is ``1``, indicating a positive direction.
+
+    Attributes
+    ----------
+    interval_length : float
+        The interval length between two neighbouring nodes.
     """
 
     def __init__(
@@ -28,6 +33,7 @@ class Network:
         self.length = length
         self.num_nodes = num_nodes
         self.direction = direction
+        self.interval_length = self.get_interval()
 
     def get_interval(self):
         """
@@ -65,9 +71,9 @@ class Network:
             start, end = end, start
         # Calculate distance
         if start < end:
-            distance = (end - start) * self.get_interval()
+            distance = (end - start) * self.interval_length
         else:
-            distance = (self.num_nodes + end - start) * self.get_interval()
+            distance = (self.num_nodes + end - start) * self.interval_length
         return distance
 
     def summary(self):
@@ -86,6 +92,6 @@ class Network:
         summary = {
             'Network Length (m)': [self.length],
             'Number of Nodes': [self.num_nodes],
-            'Interval Length (m)': [self.get_interval()]
+            'Interval Length (m)': [self.interval_length]
         }
         return pd.DataFrame(data=summary)

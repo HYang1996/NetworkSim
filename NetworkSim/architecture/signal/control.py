@@ -1,3 +1,6 @@
+__all__ = ["ControlSignal"]
+__author__ = ["Hongyi Yang"]
+
 import pandas as pd
 
 
@@ -15,6 +18,10 @@ class ControlSignal:
     control_length : int, optional
         The bit length of the control bits.
         Default is ``2``.
+    abstract : bool
+        Abstract mode of the control signals. If `True`, the control packets will be abstract as a list of source_id, \
+        destination_id and control_code in decimal form. If `False`, the control packets will be the same as the \
+        actual packets as strings in binary form. Default is ``True``.
 
     Attributes
     ----------
@@ -25,10 +32,12 @@ class ControlSignal:
     def __init__(
             self,
             id_length=7,
-            control_length=2
+            control_length=2,
+            abstract=True
     ):
         self.id_length = id_length
         self.control_length = control_length
+        self.abstract = abstract
         # Define control bits dictionary
         self.control_info = {
             0: 'New Data',
@@ -85,7 +94,7 @@ class ControlSignal:
             raise ValueError('Control information must be in the format of a dictionary.')
         self.control_info = new_info
 
-    def generate_packet(self, source, destination, control):
+    def generate_packet(self, source, destination, control_code):
         """
         Control packet generation.
 
@@ -95,19 +104,28 @@ class ControlSignal:
             Source node ID.
         destination : int
             Destination node ID.
-        control : int
+        control_code : int
             Control code in decimal.
 
         Returns
         -------
-        control_packet : str
+        control_packet : str (If `self.abstract == True`)
             The control packet string in binary.
+        control_packet : list (If `self.abstract == False`)
+            The control packet list in decimal, containing the following:
+
+            - `Source ID`
+            - `Destination ID`
+            - `Control Code`
         """
         # Check input types
-        if not isinstance(source, int) or not isinstance(destination, int) or not isinstance(control, int):
+        if not isinstance(source, int) or not isinstance(destination, int) or not isinstance(control_code, int):
             raise ValueError('All inputs must be integers.')
         # Generate all three parts of the control packet
-        packet_source = bin(source)[2:].zfill(self.id_length)
-        packet_destination = bin(destination)[2:].zfill(self.id_length)
-        packet_control = bin(control)[2:].zfill(self.control_length)
-        return packet_source + packet_destination + packet_control
+        if self.abstract:
+            return [source, destination, control_code]
+        else:
+            packet_source = bin(source)[2:].zfill(self.id_length)
+            packet_destination = bin(destination)[2:].zfill(self.id_length)
+            packet_control = bin(control_code)[2:].zfill(self.control_length)
+            return packet_source + packet_destination + packet_control
