@@ -1,0 +1,6 @@
+include *.rst
+recursive-include docs *
+include *.md
+recursive-include examples *
+recursive-include NetworkSim *.py
+include LICENSE
