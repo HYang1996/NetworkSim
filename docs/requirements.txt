@@ -8,3 +8,5 @@ pandas
 joblib
 tqdm
 scipy
+seaborn
+matplotlib
