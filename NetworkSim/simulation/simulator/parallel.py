@@ -30,7 +30,14 @@ class ParallelSimulator:
     Parameters
     ----------
     until : float, optional
-        The end time of the simulations. This should be specified if the simulation does not run on convergence.
+        The end time of the simulations. This should be specified if the simulation does not run on convergence. \
+            Default is ``None``.
+    convergence : bool, optional
+        Automatic convergence mode of simulation. Default is ``True``.
+    sem_tr : float, optional
+        The threshold standard error of mean (SEM) for convergence. Default is ``None``.
+    bs : int, optional
+        The batch size for SEM calculation during convergence. Default is ``None``.
     num_nodes : int, optional
         The total number of nodes in the network. Default value follows that in the `Network` class (``100``).
     transmitter_type : str, optional
@@ -64,6 +71,11 @@ class ParallelSimulator:
         The maximum data rate at each node, in Gbit/s. Default is ``100``.
     average_data_rate : float, optional
         The expected average data rate at each node, in Gbit/s. Default is ``50``.
+    bidirectional : bool, optional
+        The type of network architecture, either bidirectional or unidirectional. \
+            Default is ``False``, which is unidirectional.
+    seed : int, optional
+        The seed used for source traffic generation. Default is ``1``.
     n_jobs : int, optional
         The number of processors used for parallel operations. Default is ``-1`` (all available processors).
     """
@@ -71,17 +83,31 @@ class ParallelSimulator:
     def __init__(
             self,
             until=None,
+            convergence=None,
+            sem_tr=None,
+            bs=None,
             num_nodes=None,
             transmitter_type=None,
             receiver_type=None,
             traffic_generation_method=None,
             max_data_rate=None,
             average_data_rate=None,
+            bidirectional=None,
+            seed=None,
             n_jobs=-1
     ):
         if until is None:
             until = [None]
         self.until = until
+        if convergence is None:
+            convergence = [None]
+        self.convergence = convergence
+        if sem_tr is None:
+            sem_tr = [None]
+        self.sem_tr = sem_tr
+        if bs is None:
+            bs = [None]
+        self.bs = bs
         if num_nodes is None:
             num_nodes = [None]
         self.num_nodes = num_nodes
@@ -100,6 +126,12 @@ class ParallelSimulator:
         if average_data_rate is None:
             average_data_rate = [None]
         self.average_data_rate = average_data_rate
+        if bidirectional is None:
+            bidirectional = [False]
+        self.bidirectional = bidirectional
+        if seed is None:
+            seed = [1]
+        self.seed = seed
         self.n_jobs = n_jobs
         self.simulator = None
         self.num_param = None
@@ -113,12 +145,17 @@ class ParallelSimulator:
         _length = []
         _params = [
             self.until,
+            self.convergence,
+            self.sem_tr,
+            self.bs,
             self.num_nodes,
             self.transmitter_type,
             self.receiver_type,
             self.traffic_generation_method,
             self.max_data_rate,
-            self.average_data_rate
+            self.average_data_rate,
+            self.bidirectional,
+            self.seed
         ]
         for _param in _params:
             if isinstance(_param, list):
@@ -131,6 +168,12 @@ class ParallelSimulator:
             # Ensure consistency input list length
             if len(self.until) == 1:
                 self.until = self.until * _length
+            if len(self.convergence) == 1:
+                self.convergence = self.convergence * _length
+            if len(self.sem_tr) == 1:
+                self.sem_tr = self.sem_tr * _length
+            if len(self.bs) == 1:
+                self.bs = self.bs * _length
             if len(self.num_nodes) == 1:
                 self.num_nodes = self.num_nodes * _length
             if len(self.transmitter_type) == 1:
@@ -143,6 +186,10 @@ class ParallelSimulator:
                 self.max_data_rate = self.max_data_rate * _length
             if len(self.average_data_rate) == 1:
                 self.average_data_rate = self.average_data_rate * _length
+            if len(self.bidirectional) == 1:
+                self.bidirectional = self.bidirectional * _length
+            if len(self.seed) == 1:
+                self.seed = self.seed * _length
         else:
             raise ValueError("The numbers of input parameters do not match.")
         return _length
@@ -158,19 +205,25 @@ class ParallelSimulator:
         """
         if self.num_nodes[simulator_id] is not None:
             _network = Network(num_nodes=self.num_nodes[simulator_id])
-            _model = Model(network=_network)
+            _model = Model(network=_network, bidirectional=self.bidirectional[simulator_id])
         else:
-            _model = Model()
+            _model = Model(bidirectional=self.bidirectional[simulator_id])
         if self.max_data_rate[simulator_id] is not None:
             _model.constants['maximum_bit_rate'] = self.max_data_rate[simulator_id]
         if self.average_data_rate[simulator_id] is not None:
             _model.constants['average_bit_rate'] = self.average_data_rate[simulator_id]
         self.simulator[simulator_id] = BaseSimulator(
             until=self.until[simulator_id],
+            convergence=self.convergence[simulator_id],
+            sem_tr=self.sem_tr[simulator_id],
+            bs=self.bs[simulator_id],
             model=_model,
             transmitter_type=self.transmitter_type[simulator_id],
             receiver_type=self.receiver_type[simulator_id],
-            traffic_generation_method=self.traffic_generation_method[simulator_id]
+            traffic_generation_method=self.traffic_generation_method[simulator_id],
+            bidirectional=self.bidirectional[simulator_id],
+            id=simulator_id,
+            seed=self.seed[simulator_id]
         )
         self.simulator[simulator_id].initialise()
 
@@ -283,11 +336,15 @@ class ParallelSimulator:
                 'Transmitter Type',
                 'Receiver Type',
                 'Source Traffic Generation Method',
+                'Direction of Transmission',
                 'Designed Average Data Rate (Gbit/s)',
                 'Designed Maximum Data Rate (Gbit/s)',
                 'Total Number of Data Packet Transmitted',
                 'Total Number of Transmission Error',
-                'Average Latency (' + self.simulator[0].model.data_rings[0].time_unit + ')',
+                'Estimated Average Queueing Delay (ns)',
+                'Estimated Average Transfer Delay (ns)',
+                'Average Queueing Delay Latency (ns)',
+                'Average Transfer Delay Latency (ns)',
                 'Final Data Rate (Gbit/s)',
                 'Simulation Runtime (s)'
             ]

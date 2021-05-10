@@ -68,7 +68,8 @@ class Ring:
             self,
             model,
             ring_id=None,
-            time_unit='ns'
+            time_unit='ns',
+            reversed=False
     ):
         self.model = model
         self.ring_id = ring_id
@@ -77,6 +78,7 @@ class Ring:
         self.packet_count = 0
         self.packet_record = []
         self.time_unit = time_unit
+        self.reversed = reversed
 
     def get_nodes_location(self):
         """
@@ -207,6 +209,13 @@ class Ring:
             else:
                 raise NotImplementedError('Unknown time unit of the simulation.')
             new_location_on_ring = _new_location % self.model.network.length
+            # Calculate location on reversed ring
+            if self.reversed:
+                new_location_on_ring = packet[3] - (new_location_on_ring - packet[3])
+                if new_location_on_ring < 0:
+                    new_location_on_ring += self.model.network.length
+                elif new_location_on_ring > self.model.network.length:
+                    new_location_on_ring -= self.model.network.length
             # Update location when near end of the ring and causing no detection error
             if np.isclose(new_location_on_ring, self.model.network.length, atol=1e-2):
                 new_location_on_ring = 0

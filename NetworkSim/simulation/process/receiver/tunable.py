@@ -69,7 +69,7 @@ class TR(BaseReceiver):
         transmission. and informs the data reception subsystem.
         4. Depends on the control_code, the packet will be added to a queue or remove a packet from the queue;
         """
-        while True:
+        while self.env.now <= self.until:
             present, packet = self.check_control_packet()
             # Check if a control packet is detected
             if present:
@@ -95,7 +95,7 @@ class TR(BaseReceiver):
         removes it from the ring and keeps a record of the transmission.
         3. The latency of the transmission is recorded.
         """
-        while True:
+        while self.env.now <= self.until:
             if self.queue:
                 # Assign flag
                 self.data_packet_received = False
@@ -104,7 +104,7 @@ class TR(BaseReceiver):
                 # Tune to incoming data packet wavelength
                 _transmitter_id = self.ram_queue_output(_control_packet)
                 # Wait for the data packet
-                while (not self.data_packet_received) and (self.env.now <= self.until):
+                while not self.data_packet_received:
                     # Receive data packet
                     _present, _packet = self.check_data_packet(ring_id=_transmitter_id)
                     _time_difference = self.env.now - _control_packet[6]

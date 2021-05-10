@@ -45,12 +45,14 @@ class BaseTransmitter:
             ram,
             transmitter_id,
             simulator,
+            until,
             model=None
     ):
         self.env = env
         self.ram = ram
         self.transmitter_id = transmitter_id
         self.simulator = simulator
+        self.until = until
         if model is None:
             model = Model()
         self.model = model
@@ -61,9 +63,15 @@ class BaseTransmitter:
         self.transmitted_control_packet = []
         self._tunable_keywords = {'tunable', 't', 'T'}
 
-    def get_packet_from_ram(self):
+    def get_packet_from_ram(self, is_upstream=False):
         """
         Get first packet from RAM queue.
+
+        Parameters
+        ----------
+        is_upstream : bool, optional
+            If the packet is in upstream queue. Default is ``False``. \
+                This is used only for bi-directional systems.
 
         Returns
         -------
@@ -74,7 +82,13 @@ class BaseTransmitter:
         destination_id : int
             The ID of the destination node.
         """
-        generation_timestamp, data_packet, destination_id = self.ram.queue.popleft()
+        if self.simulator.bidirectional:
+            if is_upstream:
+                generation_timestamp, data_packet, destination_id = self.ram.upstream_queue.popleft()
+            else:
+                generation_timestamp, data_packet, destination_id = self.ram.downstream_queue.popleft()
+        else:
+            generation_timestamp, data_packet, destination_id = self.ram.queue.popleft()
         self.ram.record_queue_size()
         self.ram.pop_from_queue_record.append([generation_timestamp, data_packet, destination_id])
         self.simulator.ram_queue_delay.append(self.env.now - generation_timestamp)
@@ -110,7 +124,7 @@ class BaseTransmitter:
             destination_id
         ])
 
-    def transmit_data_packet(self, ring_id, packet, destination_id, generation_timestamp):
+    def transmit_data_packet(self, ring_id, packet, destination_id, generation_timestamp, reversed=False):
         """
         Data packet transmission function.
 
@@ -126,15 +140,26 @@ class BaseTransmitter:
             The ID of the node to which the data packet is transmitted.
         generation_timestamp : float
             The timestamp when the data packet is generated and stored in RAM.
+        reversed : bool, optional
+            If checking the reversed ring. Defaults is ``False``.
         """
         # Add data packet onto the ring
-        self.model.data_rings[ring_id].add_packet(
-            packet=packet,
-            generation_timestamp=generation_timestamp,
-            transmission_timestamp=self.env.now,
-            node_id=self.transmitter_id,
-            destination_id=destination_id
-        )
+        if reversed:
+            self.model.reversed_data_rings[ring_id].add_packet(
+                packet=packet,
+                generation_timestamp=generation_timestamp,
+                transmission_timestamp=self.env.now,
+                node_id=self.transmitter_id,
+                destination_id=destination_id
+            )
+        else:
+            self.model.data_rings[ring_id].add_packet(
+                packet=packet,
+                generation_timestamp=generation_timestamp,
+                transmission_timestamp=self.env.now,
+                node_id=self.transmitter_id,
+                destination_id=destination_id
+            )
         # Store data packet information
         self.transmitted_data_packet.append([
             self.env.now,
@@ -142,7 +167,7 @@ class BaseTransmitter:
             destination_id
         ])
 
-    def ring_is_full(self, ring_id):
+    def ring_is_full(self, ring_id, reversed=False):
         """
         Function to check if the data ring is fully occupied.
 
@@ -150,17 +175,25 @@ class BaseTransmitter:
         ----------
         ring_id : int
             The ID of the data ring on which the packet is transmitted.
+        reversed : bool, optional
+            If checking the reversed ring. Defaults is ``False``.
 
         Returns
         -------
         ring_is_full : bool
             ``True`` if the data ring is full, otherwise ``False``.
         """
+        if self.simulator.bidirectional:
+            if reversed:
+                if self.model.reversed_data_rings[ring_id].packet_count == self.model.max_data_packet_num_on_ring:
+                    return True
+                else:
+                    return False
         if self.model.data_rings[ring_id].packet_count == self.model.max_data_packet_num_on_ring:
             return True
         return False
 
-    def check_data_packet(self, ring_id):
+    def check_data_packet(self, ring_id, reversed=False):
         """
         Function to check if there is a data packet present at the transmitter
 
@@ -168,6 +201,8 @@ class BaseTransmitter:
         ----------
         ring_id : int
             The ID of the data ring on which the packet is transmitted.
+        reversed : bool, optional
+            If checking the reversed ring. Defaults is ``False``.
 
         Returns
         -------
@@ -183,10 +218,16 @@ class BaseTransmitter:
             - `entry_node_id`
             - `destination_node_id`
         """
-        return self.model.data_rings[ring_id].check_packet(
-            current_time=self.env.now,
-            node_id=self.transmitter_id
-        )
+        if reversed:
+            return self.model.reversed_data_rings[ring_id].check_packet(
+                current_time=self.env.now,
+                node_id=self.transmitter_id
+            )
+        else:
+            return self.model.data_rings[ring_id].check_packet(
+                current_time=self.env.now,
+                node_id=self.transmitter_id
+            )
 
     def check_data_packet_after_guard_interval(self, ring_id):
         """

@@ -26,6 +26,10 @@ class Model:
         The network definition. Default is ``Network()``.
     abstract : bool
         Abstract representation of control and data packets. Default is ``True``.
+    bidirectional : bool, optional
+        The type of network architecture, either bidirectional or unidirectional. \
+            Default is ``False``, which is unidirectional.
+
 
     Attributes
     ----------
@@ -57,7 +61,8 @@ class Model:
             control_signal=None,
             data_signal=None,
             network=None,
-            abstract=True
+            abstract=True,
+            bidirectional=False
     ):
         if control_signal is None:
             control_signal = ControlSignal(abstract=abstract)
@@ -69,13 +74,16 @@ class Model:
             network = Network()
         self.network = network
         self.abstract = abstract
+        self.bidirectional = bidirectional
         self.nodes = self.generate_nodes()
         self.data_rings = self.generate_data_rings()
+        if self.bidirectional:
+            self.reversed_data_rings = self.generate_reversed_data_rings()
         self.control_ring = self.generate_control_ring()
         self.constants = {
             'speed': 2e8,  # speed of light in fibre, in m/s
             'maximum_bit_rate': 100,  # system burst rate (maximum bit rate), in Gbit/s
-            'average_bit_rate': 50,  # system average bit rate, in Gbit/s
+            'average_bit_rate': 30,  # system average bit rate, in Gbit/s
             'data_guard_interval': 20,  # guard interval of data packets in ns
             'control_guard_interval': 0.14,  # guard interval of control packets in ns
             'tuning_time': 20  # tuning time of the receiver in ns
@@ -184,6 +192,7 @@ class Model:
         Returns
         -------
         nodes : list
+            List of `Node` objects.
         """
         return [Node(
             control_signal=self.control_signal,
@@ -199,8 +208,20 @@ class Model:
         Returns
         -------
         data_rings : list
+            List of `Ring` objects.
         """
         return [Ring(model=self, ring_id=i) for i in range(self.network.num_nodes)]
+
+    def generate_reversed_data_rings(self):
+        """
+        Generate a list of data rings in the reversed transmission direction based on the network configuration.
+
+        Returns
+        -------
+        data_rings : list
+            List of `Ring` objects with `reversed=True`.
+        """
+        return [Ring(model=self, ring_id=i, reversed=True) for i in range(self.network.num_nodes)]
 
     def generate_control_ring(self):
         """
@@ -209,5 +230,6 @@ class Model:
         Returns
         -------
         control_ring : Ring
+            List of `Ring` objects.
         """
         return Ring(model=self, ring_id=-1)

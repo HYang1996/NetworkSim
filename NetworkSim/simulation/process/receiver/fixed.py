@@ -56,10 +56,10 @@ class FR(BaseReceiver):
         removes it from the ring and keeps a record of the transmission.
         2. The latency of the transmission is recorded.
         """
-        while True:
+        while self.env.now <= self.until:
             # Check for packet if packet exist get it.
             present, packet = self.check_data_packet(ring_id=self.receiver_id)
-            if present and (self.env.now <= self.until):
+            if present:
                 # Remove packet from the ring and keep a record of its information
                 self.record_error(packet)
                 self.receive_data_packet(ring_id=self.receiver_id, packet=packet)

@@ -92,7 +92,29 @@ class BaseReceiver:
         else:
             self._time_compensation = self._transmitter_data_clock_cycle - self.model.data_packet_duration
 
-    def record_error(self, packet):
+    def is_upstream(self, source_id):
+        """
+        Check if the destination node is an upstream node.
+
+        Parameters
+        ----------
+        source_id : int
+            ID of the source node.
+
+        Returns
+        -------
+        is_upstream : bool
+            ``True`` if the destination is upstream, ``False`` if downstream.
+        """
+        _difference = self.receiver_id - source_id
+        if _difference < 0:
+            _difference += self.model.network.num_nodes
+        if _difference <= self.model.network.num_nodes / 2:
+            return False
+        else:
+            return True
+
+    def record_error(self, packet, reversed=False):
         """
         Check packet information and record error of data packet transmission.
 
@@ -100,6 +122,8 @@ class BaseReceiver:
         ----------
         packet : packet
             The data packet
+        reversed : bool, optional
+            If the receiver is receiving on the reversed data rings.
         """
         if packet[5] != self.receiver_id:
             error_type = 'destination ID mismatch'
@@ -119,6 +143,26 @@ class BaseReceiver:
                 packet[5],
                 error_type
             ])
+        # Check if packet is sent on the correct direction for bidirectional systems
+        if self.simulator.bidirectional:
+            if reversed:
+                if not self.is_upstream(source_id=packet[4]):
+                    error_type = 'downstream data found on upstream'
+                    self.simulator.error.append([
+                        self.env.now,
+                        packet[4],
+                        packet[5],
+                        error_type
+                    ])
+            else:
+                if self.is_upstream(source_id=packet[4]):
+                    error_type = 'upstream data found on downstream'
+                    self.simulator.error.append([
+                        self.env.now,
+                        packet[4],
+                        packet[5],
+                        error_type
+                    ])
 
     def record_latency(self, packet):
         """
@@ -282,7 +326,7 @@ class BaseReceiver:
         # Return the receiving ring to tune to
         return source_id
 
-    def receive_data_packet(self, ring_id, packet):
+    def receive_data_packet(self, ring_id, packet, reversed=False):
         """
         Data packet reception function.
 
@@ -294,14 +338,24 @@ class BaseReceiver:
             The ID of the data ring where the packet is removed.
         packet : packet
             The data packet.
+        reversed : bool, optional
+            If the receiver is receiving on the reversed data rings.
         """
-        # Remove data packet from the ring
-        # packet contains [raw_packet, timestamp, entry_point, source_node_id]
-        self.model.data_rings[ring_id].remove_packet(
-            node_id=self.receiver_id,
-            packet=packet,
-            reception_timestamp=self.env.now
-        )
+        if reversed:
+            # Remove data packet from the ring
+            # packet contains [raw_packet, timestamp, entry_point, source_node_id]
+            self.model.reversed_data_rings[ring_id].remove_packet(
+                node_id=self.receiver_id,
+                packet=packet,
+                reception_timestamp=self.env.now
+            )
+
+        else:
+            self.model.data_rings[ring_id].remove_packet(
+                node_id=self.receiver_id,
+                packet=packet,
+                reception_timestamp=self.env.now
+            )
         # Store data packet information
         self.received_data_packet.append([
             self.env.now,
@@ -309,7 +363,7 @@ class BaseReceiver:
             packet[4]
         ])
 
-    def check_data_packet(self, ring_id):
+    def check_data_packet(self, ring_id, reversed=False):
         """
         Function to check if there is a data packet present at the receiver
 
@@ -332,10 +386,16 @@ class BaseReceiver:
             - `entry_node_id`
             - `destination_node_id`
         """
-        return self.model.data_rings[ring_id].check_packet(
-            current_time=self.env.now,
-            node_id=self.receiver_id
-        )
+        if reversed:
+            return self.model.reversed_data_rings[ring_id].check_packet(
+                current_time=self.env.now,
+                node_id=self.receiver_id
+            )
+        else:
+            return self.model.data_rings[ring_id].check_packet(
+                current_time=self.env.now,
+                node_id=self.receiver_id
+            )
 
     def check_control_packet(self):
         """

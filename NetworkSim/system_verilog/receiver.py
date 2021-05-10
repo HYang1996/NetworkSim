@@ -9,6 +9,7 @@ import os
 def generate_testvector(
     simulator,
     receiver_id=1,
+    id_width=7,
     address_width=8,
     data_width=128,
     output_dir=None
@@ -38,6 +39,8 @@ def generate_testvector(
     data_in, ram_assert : list
         Two lists containing input data signal and RAM content to be checked against.
     """
+    # Mapping SystemVerilog ID to NetworkSim ID
+    mapped_receiver_id = receiver_id - 1
     file_dir = os.path.dirname(os.path.realpath(__file__))
     output_dir = os.path.join(file_dir, '../../../Digital-Design/SystemVerilog-Project/testvectors')
     data_in_filename = os.path.join(output_dir, 'receiver_data_in.tv')
@@ -48,9 +51,9 @@ def generate_testvector(
     data_in = []
     ram_assert = []
     data = str(bin(0)[2:].zfill(data_width))
-    last_packet_time = simulator.receiver[receiver_id].received_data_packet[-1][0]
+    last_packet_time = simulator.receiver[mapped_receiver_id].received_data_packet[-1][0]
     # Generate test vector content
-    for data_packet in simulator.receiver[receiver_id].received_data_packet:
+    for data_packet in simulator.receiver[mapped_receiver_id].received_data_packet:
         # Time period with no data
         while time_counter < data_packet[0]:
             data_in.append([time_counter, str(bin(0)[2:].zfill(data_width))])
@@ -58,7 +61,10 @@ def generate_testvector(
             time_counter += 1
         # Clock cycle with receiver ID
         if time_counter == data_packet[0]:
-            data_in.append([time_counter, str(bin(receiver_id)[2:].zfill(data_width))])
+            mapped_source_id = data_packet[2] + 1
+            packet_content = str(bin(receiver_id)[2:].zfill(data_width))
+            packet_content = str(bin(mapped_source_id)[2:].zfill(id_width)) + packet_content[id_width:]
+            data_in.append([time_counter, packet_content])
             ram_assert.append([ram_address, data])
             time_counter += 1
         # Time period with data
@@ -73,12 +79,12 @@ def generate_testvector(
             if i == num_clock_cycle - 1:
                 data = data_packet[1][bit_counter:].ljust(data_width, '0')
             else:
-                data = data_packet[1][bit_counter:bit_counter+data_width]
+                data = data_packet[1][bit_counter:bit_counter + data_width]
             data_in.append([time_counter, data])
             ram_assert.append([ram_address, data])
             bit_counter += data_width
             time_counter += 1
-            if i < num_clock_cycle-1:
+            if i < num_clock_cycle - 1:
                 ram_address += 1
                 if ram_address == 2**address_width:
                     ram_address = 0

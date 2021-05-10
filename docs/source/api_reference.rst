@@ -114,8 +114,15 @@ Network Performance Analysis
     :toctree: modules/auto_generated/
     :template: function.rst
 
+    get_queueing_delay
+    get_service_delay
     get_transfer_delay
-    get_throughput
+    get_final_batch_delay
+    get_extended_run_delay
+    get_overall_delay
+    get_final_batch_throughput
+    get_extended_run_throughput
+    get_overall_throughput
 
 Probability Distributions for Discrete Event Simulation
 -------------------------------------------------------
@@ -163,6 +170,57 @@ Simulation Summary
 
     Summary
 
+Simulation Results Plotting
+---------------------------
+Plots can also be directly generated from simulation summary.
+
+.. currentmodule:: NetworkSim.simulation.tools.plot
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: function.rst
+
+    init
+    plot_latency_heatmap
+    plot_latency_scatter
+    plot_latency
+    plot_latency_throughput
+    plot_count
+    plot_latency_3d
+    plot_batch_throughput
+    plot_analytical_simulation_latency
+
+Simulation Model Loading and Saving
+-----------------------------------
+
+.. currentmodule:: NetworkSim.simulation.tools.load_save
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: function.rst
+
+    load_model
+    save_model
+    clear_env
+
+Tools used for Publication Purposes
+-----------------------------------
+
+.. currentmodule:: NetworkSim.simulation.tools.publication
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: function.rst
+
+    init
+    plot_delay
+    plot_throughput
+    plot_buffer
+    plot_delay_heatmap
+    plot_packet_heatmap
+    plot_ook_ber
+    plot_scaled_network_delay
+
 Simulation Processes
 ====================
 
@@ -195,6 +253,8 @@ Transmitter Process
     BaseTransmitter
     FT
     TT
+    TT_U
+    TT_D
 
 Receiver Process
 ----------------
@@ -208,6 +268,8 @@ Receiver Process
     BaseReceiver
     FR
     TR
+    FR_U
+    FR_D
 
 Simulation Setup
 ================
@@ -241,4 +303,29 @@ Parallel Simulation
     ParallelSimulator
 
 
+SystemVerilog Integration
+=========================
+The :mod:`NetworkSim.system_verilog` module contains useful functions to generate relevant files used for writing and verification of the SystemVerilog modules in the project.
 
+Receiver Module
+---------------
+
+.. currentmodule:: NetworkSim.system_verilog.receiver
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: function.rst
+
+    generate_testvector
+
+Transmitter Module
+------------------
+
+.. currentmodule:: NetworkSim.system_verilog.transmitter
+
+.. autosummary::
+    :toctree: modules/auto_generated/
+    :template: function.rst
+
+    print_delay_lut
+    generate_testvector

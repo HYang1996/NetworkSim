@@ -28,6 +28,11 @@ class RAM:
 
         - 'pareto' : Pareto Distribution
         - 'poisson' : Poisson Distribution
+    bidirectional : bool, optional
+        If the system is bidirectional, default is ``False``. \
+            If ``True``, `upstream_queue` and `downstream_queue` will be set up.
+    seed : int, optional
+        The seed used for source traffic generation. Default is ``1``.
 
     Attributes
     ----------
@@ -38,12 +43,39 @@ class RAM:
         - `Interarrival to Next`
         - `Raw Packet`
         - `Destination ID`
-    queue : queue
-        A queue containing the remaining data packets in the RAM, with the fields:
+    queue : deque
+        A queue containing the remaining data packets in the RAM for unidirectional transmission, with the fields:
 
         - `timestamp`
         - `data_packet`
         - `destination_id`
+    upstream_queue : deque
+        A queue containing the remaining data packets in the RAM  in the upstream direction \
+            for bidirectional transmission, with the fields:
+
+        - `timestamp`
+        - `data_packet`
+        - `destination_id`
+    downstream_queue : deque
+        A queue containing the remaining data packets in the RAM  in the downstream direction \
+            for bidirectional transmission, with the fields:
+
+        - `timestamp`
+        - `data_packet`
+        - `destination_id`
+    queue_size_record : list
+        A list of queue size record of the RAM, containing the columns:
+
+        In the case of unidirectional transmission:
+
+        - `timestamp`
+        - `queue_length`
+
+        In the case of bidirectional transmission:
+
+        - `timestamp`
+        - `upstream_queue_length`
+        - `downstream_queue_length`
     """
 
     def __init__(
@@ -51,19 +83,26 @@ class RAM:
             env,
             until,
             ram_id,
+            bidirectional,
             model=None,
-            distribution='pareto'
+            distribution='pareto',
+            seed=1,
     ):
         self.env = env
         self.until = until
         self.ram_id = ram_id
+        self.bidirectional = bidirectional
         if model is None:
             model = Model()
         self.model = model
         self.distribution_type = distribution
         self.generated_data_packet = []
-        self.queue = deque()
-        self._distribution = Distribution(seed=ram_id, model=model)
+        if self.bidirectional:
+            self.upstream_queue = deque()
+            self.downstream_queue = deque()
+        else:
+            self.queue = deque()
+        self._distribution = Distribution(seed=seed * ram_id, model=model)
         self._interarrival = self.get_interarrival()
         self._next_interarrival = 0
         self._destination_ids = self.get_destination_ids()  # List of possible destination to send packets to
@@ -112,6 +151,28 @@ class RAM:
         if self.distribution_type == 'poisson':
             return self._distribution.poisson()
 
+    def is_upstream(self, destination_id):
+        """
+        Check if the destination node is an upstream node.
+
+        Parameters
+        ----------
+        destination_id : int
+            ID of the destination node.
+
+        Returns
+        -------
+        is_upstream : bool
+            ``True`` if the destination is upstream, ``False`` if downstream.
+        """
+        _difference = destination_id - self.ram_id
+        if _difference < 0:
+            _difference += self.model.network.num_nodes
+        if _difference <= self.model.network.num_nodes / 2:
+            return False
+        else:
+            return True
+
     def generate_data_packet(self):
         """
         Data packet generation.
@@ -134,7 +195,13 @@ class RAM:
             data_packet,
             destination_id
         ])
-        self.queue.append([timestamp, data_packet, destination_id])
+        if self.bidirectional:
+            if self.is_upstream(destination_id=destination_id):
+                self.upstream_queue.append([timestamp, data_packet, destination_id])
+            else:
+                self.downstream_queue.append([timestamp, data_packet, destination_id])
+        else:
+            self.queue.append([timestamp, data_packet, destination_id])
         # For unit test
         self.add_to_queue_record.append([timestamp, data_packet, destination_id])
 
@@ -142,13 +209,16 @@ class RAM:
         """
         Record the current size of the RAM queue
         """
-        self.queue_size_record.append([self.env.now, len(self.queue)])
+        if self.bidirectional:
+            self.queue_size_record.append([self.env.now, len(self.upstream_queue), len(self.downstream_queue)])
+        else:
+            self.queue_size_record.append([self.env.now, len(self.queue)])
 
     def ram_traffic_generation(self):
         """
         Generation of RAM traffic as a simulation process.
         """
-        while True:
+        while self.env.now <= self.until:
             self._next_interarrival = self.get_interarrival()
             yield self.env.timeout(self._interarrival)
             self.generate_data_packet()

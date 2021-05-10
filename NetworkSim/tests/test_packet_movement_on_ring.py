@@ -88,3 +88,36 @@ def test_data_packet_location_on_ring():
 
     assert presence_test == presence_expected
     assert packet_test == packet_expected
+
+
+def test_data_packet_location_on_reversed_ring():
+    num_test = 15
+    data_ring = Ring(model=test_model, time_unit='s', reversed=True)
+    # Add control packets to ring at different timings
+    test_nodes = [0, 50, 99]
+    test_packets = ['00000000', '00001111', '11111111']
+    test_time = [0, 20, 40]
+    for i in range(3):
+        data_ring.add_packet(node_id=test_nodes[i],
+                             destination_id=-1,
+                             packet=test_packets[i],
+                             generation_timestamp=test_time[i],
+                             transmission_timestamp=test_time[i])
+    presence_expected = [True] * num_test
+    packet_expected = []
+    for i in range(int(num_test / 3)):
+        packet_expected.append(['00000000', 0, 0, 0, 0, -1])
+        packet_expected.append(['00001111', 20, 20, 50, 50, -1])
+        packet_expected.append(['11111111', 40, 40, 99, 99, -1])
+    presence_test = [None] * num_test
+    packet_test = [None] * num_test
+    # Check packet
+    check_time = [0, 20, 40, 1000, 1020, 1040, 101, 121, 141, 99, 119, 139, 100000, 200030, 3490]
+    check_nodes = [0, 50, 99, 0, 50, 99, 99, 49, 98, 1, 51, 0, 0, 40, 49]
+    for i in range(num_test):
+        presence_test[i], packet_test[i] = \
+            data_ring.check_packet(current_time=check_time[i],
+                                   node_id=check_nodes[i])
+
+    assert presence_test == presence_expected
+    assert packet_test == packet_expected

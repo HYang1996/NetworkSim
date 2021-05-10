@@ -5,6 +5,10 @@ import pandas as pd
 
 
 class Info:
+    """
+    Information class to generate basic information of modules involved in the simulation.
+    """
+
     def __init__(
             self,
             simulator

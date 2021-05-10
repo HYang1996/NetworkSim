@@ -44,6 +44,7 @@ class FT(BaseTransmitter):
             ram,
             transmitter_id,
             simulator,
+            until,
             model=None
     ):
         super().__init__(
@@ -51,6 +52,7 @@ class FT(BaseTransmitter):
             ram=ram,
             transmitter_id=transmitter_id,
             simulator=simulator,
+            until=until,
             model=model
         )
         self.control_packet_transmitted = False
@@ -70,7 +72,7 @@ class FT(BaseTransmitter):
         3. The control packet is added to the control ring when a slot is available;
         4. The subsystem informs the data transmitter to start transmission.
         """
-        while True:
+        while self.env.now <= self.until:
             # Check if RAM is not empty and if previous data packet has been transmitted
             if self.ram.queue and not self.ring_is_full(self.transmitter_id):
                 # Check if both control and data rings are available
@@ -101,7 +103,7 @@ class FT(BaseTransmitter):
         1. The first data packet in the RAM queue is popped;
         2. The data packet is added onto its respective ring.
         """
-        while True:
+        while self.env.now <= self.until:
             # Check if a control packet has been transmitted
             if self.control_packet_transmitted:
                 # Remove packet from RAM queue

@@ -1,5 +1,5 @@
 __all__ = ["TT"]
-__author__ = ["Cheuk Ming Chung"]
+__author__ = ["Cheuk Ming Chung", "Hongyi Yang"]
 
 import numpy as np
 
@@ -44,12 +44,14 @@ class TT(BaseTransmitter):
             ram,
             transmitter_id,
             simulator,
+            until,
             model=None):
         super().__init__(
             env=env,
             ram=ram,
             transmitter_id=transmitter_id,
             simulator=simulator,
+            until=until,
             model=model
         )
         self.tuning_delay = self.get_tuning_delay()
@@ -102,7 +104,7 @@ class TT(BaseTransmitter):
         3. Wait for correct timing to transmit
         4. The data packet is added onto its respective ring.
         """
-        while True:
+        while self.env.now <= self.until:
             if self.ram.queue:
                 # Remove packet from RAM queue
                 _data_packet_wait_for_transmit = True

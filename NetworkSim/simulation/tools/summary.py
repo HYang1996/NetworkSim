@@ -1,7 +1,8 @@
 __all__ = ["Summary"]
 __author__ = ["Hongyi Yang"]
 
-from NetworkSim.simulation.tools.performance_analysis import get_transfer_delay, get_queueing_delay
+from NetworkSim.simulation.tools.performance_analysis import \
+    get_transfer_delay, get_queueing_delay, get_service_delay, get_overall_delay
 
 import numpy as np
 import pandas as pd
@@ -32,21 +33,25 @@ class Summary:
         simulation_summary : pandas DataFrame
             A DataFrame containing a few key parameters in the simulation.
         """
+        if self.simulator.bidirectional:
+            _direction = 'bi-directional'
+        else:
+            _direction = 'uni-directional'
         _rows = {
             'Total Number of Nodes': self.simulator.model.network.num_nodes,
             'Transmitter Type': self.simulator.transmitter_type,
             'Receiver Type': self.simulator.receiver_type,
             'Source Traffic Generation Method': self.simulator.traffic_generation_method,
+            'Direction of Transmission': _direction,
             'Designed Average Data Rate (Gbit/s)': self.simulator.model.constants['average_bit_rate'],
             'Designed Maximum Data Rate (Gbit/s)': self.simulator.model.constants['maximum_bit_rate'],
             'Total Number of Data Packet Transmitted': len(self.simulator.latency),
             'Total Number of Transmission Error': len(self.simulator.error),
-            'Estimated Average Queueing Delay (ns)': get_queueing_delay(self.simulator),
+            'Estimated Average Queueing Delay (ns)':
+            get_queueing_delay(self.simulator) + get_service_delay(self.simulator),
             'Estimated Average Transfer Delay (ns)': get_transfer_delay(self.simulator),
-            'Average Queueing Delay Latency (ns)': np.mean(
-                list(self.simulator.latency[i]['Queueing Delay'] for i in range(len(self.simulator.latency)))),
-            'Average Transfer Delay Latency (ns)': np.mean(
-                list(self.simulator.latency[i]['Transfer Delay'] for i in range(len(self.simulator.latency)))),
+            'Average Queueing Delay Latency (ns)': get_overall_delay(self.simulator)['mean_queueing_delay'],
+            'Average Transfer Delay Latency (ns)': get_overall_delay(self.simulator)['mean_transfer_delay'],
             'Final Data Rate (Gbit/s)': self.simulator.latency[-1]['Data Rate'],
             'Simulation Runtime (s)': self.simulator.runtime
         }
@@ -167,9 +172,111 @@ class Summary:
         }
         return pd.DataFrame(_receiver_dict)
 
-    def latency_summary(self):
+    def latency_summary(self, data_range, latency_type):
         """
         Summary of transmission latency.
+
+        Parameters
+        ----------
+        data_range : str, optional
+            The range of data selected for latency summary, chosen from the following:
+
+            - `all` or `a`
+                All simulation data.
+            - `extended` or `e`
+                Extended simulation data in convergence mode.
+            - `batch` or `b`
+                Last batch data in convergence mode.
+
+            Default is ``None``, \
+                which is extended data for convergence mode and all data for non-convergence mode.
+
+        Returns
+        -------
+        average_latency_summary : pandas DataFrame
+            A DataFrame of average latencies from one node to another. The columns represent destination nodes while \
+            the index values represent source nodes.
+        """
+        _all_range_keywords = {'all', 'a'}
+        _extended_range_keywords = {'extended', 'e'}
+        _batch_range_keywords = {'batch', 'b'}
+        _transfer_delay_keywords = {'transfer_delay', 'td'}
+        _queueing_delay_keywords = {'queueing delay', 'qd'}
+        if data_range is None:
+            if self.simulator.convergence:
+                data_range = 'e'
+            else:
+                data_range = 'a'
+        if data_range in _all_range_keywords:
+            _latency = self.simulator.latency
+        elif data_range in _extended_range_keywords:
+            if not self.simulator.convergence:
+                raise ValueError("Extended latency summary can only be generated "
+                                 "for the simulator with convergence mode enabled.")
+            _start = self.simulator.batch_stats[-1]['end_index']
+            _latency = self.simulator.latency[_start:]
+        elif data_range in _batch_range_keywords:
+            if not self.simulator.convergence:
+                raise ValueError("Last batch latency summary can only be generated "
+                                 "for the simulator with convergence mode enabled.")
+            _start = self.simulator.batch_stats[-1]['start_index']
+            _end = self.simulator.batch_stats[-1]['end_index']
+            _latency = self.simulator.latency[_start:_end]
+        else:
+            raise ValueError("Latency range not recognised")
+        if latency_type in _transfer_delay_keywords or latency_type is None:
+            _type = 'Transfer Delay'
+        elif latency_type in _queueing_delay_keywords:
+            _type = 'Queueing Delay'
+        else:
+            raise ValueError("Latency type not recognised.")
+        # Initialise n x n array (n is the number of nodes in the network)
+        # Row == Source Node, Column == Destination Node
+        _n = self.simulator.model.network.num_nodes
+        _latency_average = np.zeros([_n, _n])
+        _latency_sum = np.zeros([_n, _n])
+        _count = np.zeros([_n, _n])
+        # Record latency information
+        for latency_info in _latency:
+            _latency_sum[latency_info['Source ID']][latency_info['Destination ID']] += latency_info[_type]
+            _count[latency_info['Source ID']][latency_info['Destination ID']] += 1
+        # Calculate latency mean
+        for i in range(_n):
+            for j in range(_n):
+                if _count[i][j] == 0:
+                    _latency_average[i][j] = 0
+                    # _latency_average[i][j] = np.nan
+                else:
+                    _latency_average[i][j] = _latency_sum[i][j] / _count[i][j]
+        _rows = [i for i in range(_n)]
+        _columns = [i for i in range(_n)]
+        return pd.DataFrame(_latency_average, index=_rows, columns=_columns)
+
+    def packet_count_summary(self):
+        """
+        Summary of transmission packet count.
+
+        Returns
+        -------
+        count_summary : pandas DataFrame
+            A DataFrame of transmitted packet count. The columns represent destination nodes while \
+                the indices represent source nodes.
+        """
+        # Initialise n x n array (n is the number of nodes in the network)
+        # Row == Source Node, Column == Destination Node
+        _n = self.simulator.model.network.num_nodes
+        _count = np.zeros([_n, _n])
+        # Record packet transmission information
+        for latency_info in self.simulator.latency:
+            _count[latency_info['Source ID']][latency_info['Destination ID']] += 1
+        _rows = [i for i in range(_n)]
+        _columns = [i for i in range(_n)]
+        return pd.DataFrame(_count, index=_rows, columns=_columns)
+
+    def packet_delay_summary(self, normalised=False, std=False):
+        """
+        Summary of packet delay / queueing delay.
+        Packet Delay (also refer as Queueing Delay) = successful transmission time - generation time of the packet
 
         Returns
         -------
@@ -180,20 +287,102 @@ class Summary:
         # Initialise n x n array (n is the number of nodes in the network)
         # Row == Source Node, Column == Destination Node
         _n = self.simulator.model.network.num_nodes
-        _latency_average = np.zeros([_n, _n])
-        _latency_sum = np.zeros([_n, _n])
+        _packet_duration = self.simulator.model.data_packet_duration
         _count = np.zeros([_n, _n])
-        # Record latency information
-        for latency_info in self.simulator.latency:
-            _latency_sum[latency_info[1]][latency_info[2]] += latency_info[4]
-            _count[latency_info[1]][latency_info[2]] += 1
-        # Calculate latency mean
-        for i in range(_n):
-            for j in range(_n):
-                if _count[i][j] == 0:
-                    _latency_average[i][j] = np.nan
-                else:
-                    _latency_average[i][j] = _latency_sum[i][j] / _count[i][j]
-        _rows = ['Source Node ' + str(i) for i in range(_n)]
-        _columns = ['Destination Node ' + str(i) for i in range(_n)]
-        return pd.DataFrame(_latency_average, index=_rows, columns=_columns)
+        _sum = np.zeros([_n, _n])
+        _packet_info_source_node_pair = [[[] for _ in range(_n)] for _ in range(_n)]
+        _mean_packet_delay = np.zeros([_n, _n])
+        _std_packet_delay = np.zeros([_n, _n])
+        _rows = [i for i in range(_n)]
+        _columns = [i for i in range(_n)]
+        # Record packet transmission information
+        if std:
+            for latency_info in self.simulator.latency:
+                _packet_info_source_node_pair[latency_info['Source ID']
+                                              ][latency_info['Destination ID']].append(latency_info['Queueing Delay'])
+            for i in range(_n):
+                for j in range(_n):
+                    temp_array = np.array(_packet_info_source_node_pair[i][j])
+                    if temp_array.size == 0:
+                        _mean_packet_delay[i][j] = 0
+                        _std_packet_delay[i][j] = 0
+                    else:
+                        if normalised:
+                            temp_array = temp_array / _packet_duration
+                            _mean_packet_delay[i][j] = np.mean(temp_array)
+                            _std_packet_delay[i][j] = np.std(temp_array)
+                        else:
+                            _mean_packet_delay[i][j] = np.mean(temp_array)
+                            _std_packet_delay[i][j] = np.std(temp_array)
+            return pd.DataFrame(_mean_packet_delay, index=_rows, columns=_columns), \
+                pd.DataFrame(_std_packet_delay, index=_rows, columns=_columns)
+        else:
+            for latency_info in self.simulator.latency:
+                _count[latency_info['Source ID']][latency_info['Destination ID']] += 1
+                _sum[latency_info['Source ID']][latency_info['Destination ID']] += latency_info['Queueing Delay']
+            for i in range(_n):
+                for j in range(_n):
+                    if _count[i][j] == 0 or _sum[i][j] == 0:
+                        _mean_packet_delay[i][j] = 0
+                    else:
+                        if normalised:
+                            _mean_packet_delay[i][j] = (_sum[i][j] / _count[i][j]) / _packet_duration
+                        else:
+                            _mean_packet_delay[i][j] = (_sum[i][j] / _count[i][j])
+            return pd.DataFrame(_mean_packet_delay, index=_rows, columns=_columns)
+
+    def ram_queue_summary(self):
+        """
+        Summary of queue size in the RAMs.
+
+        Returns
+        -------
+        overall_mean : float
+            Overall mean value of the recorded queue size in the RAMs.
+        overall_max : float
+            Overall maximum value of the recorded queue size in the RAMs.
+        queue_size_summary : pandas DataFrame
+            A pandas DataFrame containing the following columns for each RAM in the simulator:
+
+            For unidirectional transmission:
+
+            - `Mean Queue Size`
+            - `Maximum Queue Size`
+
+            For bidirectional transmission:
+
+            - `Mean Queue Size (Upstream)`
+            - `Mean Queue Size (Downstream)`
+            - `Maximum Queue Size (Upstream)`
+            - `Maximum Queue Size (Downstream)`
+        """
+        _n = self.simulator.model.network.num_nodes
+        mean_queue_size = []
+        max_queue_size = []
+        mean_queue_size_bi = []
+        max_queue_size_bi = []
+        _rows = [i for i in range(_n)]
+        df = pd.DataFrame(index=_rows)
+        for ram in self.simulator.RAM:
+            if self.simulator.bidirectional:
+                _upstream_queue_record = list(record[1] for record in ram.queue_size_record)
+                _downstream_queue_record = list(record[2] for record in ram.queue_size_record)
+                mean_queue_size_bi.append([np.mean(_upstream_queue_record), np.mean(_downstream_queue_record)])
+                max_queue_size_bi.append([np.max(_upstream_queue_record), np.max(_downstream_queue_record)])
+                mean_queue_size.append(np.mean(_upstream_queue_record + _downstream_queue_record))
+                max_queue_size.append(np.max(_upstream_queue_record + _downstream_queue_record))
+            else:
+                _queue_record = list(record[1] for record in ram.queue_size_record)
+                mean_queue_size.append(np.mean(_queue_record))
+                max_queue_size.append(np.max(_queue_record))
+        if self.simulator.bidirectional:
+            df[['Mean Queue Size (Upstream)', 'Mean Queue Size (Downstream)']] = pd.DataFrame(mean_queue_size_bi)
+            df['Mean Queue Size (Overall)'] = pd.DataFrame(mean_queue_size)
+            df[['Maximum Queue Size (Upstream)', 'Maximum Queue Size (Downstream)']] = pd.DataFrame(max_queue_size_bi)
+            df['Maximum Queue Size (Overall)'] = pd.DataFrame(max_queue_size)
+        else:
+            df['Mean Queue Size'] = pd.DataFrame(mean_queue_size)
+            df['Maximum Queue Size'] = pd.DataFrame(max_queue_size)
+        overall_mean = np.mean(list(mean for mean in mean_queue_size))
+        overall_max = np.max(list(mean for mean in max_queue_size))
+        return overall_mean, overall_max, df

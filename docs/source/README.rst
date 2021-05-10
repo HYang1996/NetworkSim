@@ -55,3 +55,60 @@ Documentation
 -------------
 
 Read the detailed package `API reference <https://networksim.readthedocs.io/en/latest/>`__.
+
+Package Structure
+-----------------
+
+.. code-block:: bash
+
+    NetworkSim
+    ├── architecture
+    │   ├── base
+    │   │   ├── network.py
+    │   │   ├── node.py
+    │   │   └── ring.py
+    │   ├── setup
+    │   │   └── model.py
+    │   └── signal
+    │       ├── control.py
+    │       └── data.py
+    ├── simulation
+    │   ├── process
+    │   │   ├── ram.py
+    │   │   ├── receiver
+    │   │   │   ├── base.py
+    │   │   │   ├── fixed.py
+    │   │   │   ├── fixed_downstream.py
+    │   │   │   ├── fixed_upstream.py
+    │   │   │   └── tunable.py
+    │   │   └── transmitter
+    │   │       ├── base.py
+    │   │       ├── fixed.py
+    │   │       ├── tunable.py
+    │   │       ├── tunable_downstream.py
+    │   │       └── tunable_upstream.py
+    │   ├── simulator
+    │   │   ├── base.py
+    │   │   └── parallel.py
+    │   └── tools
+    │       ├── clock.py
+    │       ├── distribution.py
+    │       ├── info.py
+    │       ├── load_save.py
+    │       ├── performance_analysis.py
+    │       ├── plot.py
+    │       ├── presentation.py
+    │       ├── publication.py
+    │       └── summary.py
+    ├── system_verilog
+    │   ├── README.md
+    │   ├── receiver.py
+    │   └── transmitter.py
+    └── tests
+        ├── test_packet_detection_and_reception.py
+        ├── test_packet_movement_on_ring.py
+        ├── test_packet_transmission_time.py
+        ├── test_source_traffic_generation.py
+        ├── test_transmitter_data_packet_transmission.py
+        ├── test_transmitter_ram_queue.py
+        └── test_transmitter_ring_slot_availability_check.py
