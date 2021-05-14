@@ -1,5 +1,6 @@
 
 from distutils.core import setup
+import setuptools
 import codecs
 
 with codecs.open("README.rst", encoding="utf-8-sig") as f:
@@ -8,14 +9,14 @@ with codecs.open("README.rst", encoding="utf-8-sig") as f:
 setup(
     name='NetworkSim',
     packages=['NetworkSim'],
-    version='0.2.1',
+    version='0.2.2',
     license='MIT',
     description='A WDM ring datacentre network simulator',
     long_description=LONG_DESCRIPTION,
     maintainer='Hongyi Yang',
     maintainer_email='zceehya@ucl.ac.uk',
     url='https://github.com/HYang1996/NetworkSim',
-    download_url='https://github.com/HYang1996/NetworkSim/archive/refs/tags/0.2.1.tar.gz',
+    download_url='https://github.com/HYang1996/NetworkSim/archive/refs/tags/0.2.2.tar.gz',
     install_requires=[            # I get to this in a second
         'pandas',
         'simpy',
